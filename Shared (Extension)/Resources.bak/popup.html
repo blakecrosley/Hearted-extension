@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hearted</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+      width: 320px;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #fff;
+    }
+
+    .header {
+      padding: 20px;
+      text-align: center;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .logo {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    .title {
+      font-size: 20px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #e91e63 0%, #9c27b0 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: rgba(255,255,255,0.6);
+      margin-top: 4px;
+    }
+
+    .content {
+      padding: 20px;
+    }
+
+    .page-info {
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .page-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .page-url {
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .save-btn {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #e91e63 0%, #9c27b0 100%);
+      color: white;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: transform 0.2s, opacity 0.2s;
+    }
+
+    .save-btn:hover {
+      transform: translateY(-2px);
+    }
+
+    .save-btn:active {
+      transform: translateY(0);
+    }
+
+    .save-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .save-btn.success {
+      background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);
+    }
+
+    .save-btn.error {
+      background: linear-gradient(135deg, #f44336 0%, #c62828 100%);
+    }
+
+    .status {
+      text-align: center;
+      padding: 12px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.6);
+    }
+
+    .status.error {
+      color: #f44336;
+    }
+
+    .status.success {
+      color: #4caf50;
+    }
+
+    .footer {
+      padding: 16px 20px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .footer-link {
+      font-size: 12px;
+      color: rgba(255,255,255,0.5);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .footer-link:hover {
+      color: #e91e63;
+    }
+
+    .stats {
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+    }
+
+    .keyboard-hint {
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      text-align: center;
+      padding: 8px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+      margin-top: 12px;
+    }
+
+    kbd {
+      background: rgba(255,255,255,0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">❤️</div>
+    <div class="title">Hearted</div>
+    <div class="subtitle">Your personal content archive</div>
+  </div>
+
+  <div class="content">
+    <div class="page-info">
+      <div class="page-title" id="page-title">Loading...</div>
+      <div class="page-url" id="page-url"></div>
+    </div>
+
+    <button class="save-btn" id="save-btn">
+      <span>❤️</span>
+      <span id="btn-text">Save This Page</span>
+    </button>
+
+    <div class="status" id="status"></div>
+
+    <div class="keyboard-hint">
+      Quick save: <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>H</kbd>
+    </div>
+  </div>
+
+  <div class="footer">
+    <a href="http://localhost:8100" target="_blank" class="footer-link">Open Archive →</a>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

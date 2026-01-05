@@ -5,8 +5,6 @@
 //  Created by Blake Crosley on 1/5/26.
 //
 
-import WebKit
-
 #if os(iOS)
 import UIKit
 typealias PlatformViewController = UIViewController
@@ -18,64 +16,24 @@ typealias PlatformViewController = NSViewController
 
 let extensionBundleIdentifier = "com.941apps.Hearted.Extension"
 
-class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMessageHandler {
-
-    @IBOutlet var webView: WKWebView!
+class ViewController: PlatformViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        self.webView.navigationDelegate = self
-
-#if os(iOS)
-        self.webView.scrollView.isScrollEnabled = false
-#endif
-
-        self.webView.configuration.userContentController.add(self, name: "controller")
-
-        self.webView.loadFileURL(Bundle.main.url(forResource: "Main", withExtension: "html")!, allowingReadAccessTo: Bundle.main.resourceURL!)
-    }
-
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-#if os(iOS)
-        webView.evaluateJavaScript("show('ios')")
-#elseif os(macOS)
-        webView.evaluateJavaScript("show('mac')")
-
+#if os(macOS)
+        // Check extension state and open Safari preferences
         SFSafariExtensionManager.getStateOfSafariExtension(withIdentifier: extensionBundleIdentifier) { (state, error) in
             guard let state = state, error == nil else {
-                // Insert code to inform the user that something went wrong.
                 return
             }
 
-            DispatchQueue.main.async {
-                if #available(macOS 13, *) {
-                    webView.evaluateJavaScript("show('mac', \(state.isEnabled), true)")
-                } else {
-                    webView.evaluateJavaScript("show('mac', \(state.isEnabled), false)")
+            if !state.isEnabled {
+                DispatchQueue.main.async {
+                    SFSafariApplication.showPreferencesForExtension(withIdentifier: extensionBundleIdentifier)
                 }
             }
         }
 #endif
     }
-
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-#if os(macOS)
-        if (message.body as! String != "open-preferences") {
-            return
-        }
-
-        SFSafariApplication.showPreferencesForExtension(withIdentifier: extensionBundleIdentifier) { error in
-            guard error == nil else {
-                // Insert code to inform the user that something went wrong.
-                return
-            }
-
-            DispatchQueue.main.async {
-                NSApp.terminate(self)
-            }
-        }
-#endif
-    }
-
 }
