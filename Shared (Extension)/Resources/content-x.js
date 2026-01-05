@@ -49,17 +49,57 @@
       });
 
       // Check for video content
-      const hasVideo = article.querySelector('[data-testid="videoPlayer"], video, [data-testid="videoComponent"]') !== null;
+      let hasVideo = false;
+      let videoUrl = null;
+      let videoThumbnail = null;
 
-      // Get video thumbnail if present
-      const videoThumb = article.querySelector('[data-testid="videoPlayer"] img, video[poster]');
-      if (videoThumb) {
-        const poster = videoThumb.poster || videoThumb.src;
-        if (poster && !images.includes(poster)) images.push(poster);
+      const videoPlayer = article.querySelector('[data-testid="videoPlayer"]');
+      if (videoPlayer) {
+        hasVideo = true;
+
+        // Try to get video URL directly from video element
+        const videoEl = videoPlayer.querySelector('video');
+        if (videoEl) {
+          // Check video src attribute
+          if (videoEl.src && videoEl.src.includes('video.twimg.com')) {
+            videoUrl = videoEl.src;
+          }
+
+          // Check source elements
+          const sources = videoEl.querySelectorAll('source');
+          sources.forEach(source => {
+            const src = source.src;
+            if (src && src.includes('video.twimg.com') && src.includes('.mp4')) {
+              // Prefer mp4 over m3u8
+              if (!videoUrl || !videoUrl.includes('.mp4')) {
+                videoUrl = src;
+              }
+            }
+          });
+
+          // Get poster as thumbnail
+          if (videoEl.poster) {
+            videoThumbnail = videoEl.poster;
+          }
+        }
+
+        // Also try to get thumbnail from img in video container
+        const thumbImg = videoPlayer.querySelector('img');
+        if (thumbImg && thumbImg.src && !thumbImg.src.includes('profile_images')) {
+          videoThumbnail = thumbImg.src;
+          if (!images.includes(videoThumbnail)) {
+            images.push(videoThumbnail);
+          }
+        }
       }
 
       // Determine content type
-      const contentType = hasVideo ? 'video' : (images.length > 0 ? 'image' : 'tweet');
+      let contentType = 'tweet';
+      if (hasVideo) {
+        contentType = 'video';
+      } else if (images.length > 0) {
+        contentType = 'image';
+      }
 
       return {
         source_id: tweetId,
@@ -78,7 +118,9 @@
           author_handle: authorHandle,
           text: tweetText,
           images: images,
-          has_video: hasVideo
+          has_video: hasVideo,
+          video_url: videoUrl,
+          video_thumbnail: videoThumbnail
         }
       };
     } catch (e) {
