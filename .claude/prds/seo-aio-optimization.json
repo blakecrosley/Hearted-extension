@@ -1,0 +1,94 @@
+{
+  "project": {
+    "name": "Hearted (h3arted.com) SEO/AIO Optimization",
+    "description": "Create web presence for h3arted.com Chrome extension - currently extension-only with no landing page"
+  },
+  "stories": [
+    {
+      "id": "web-1",
+      "title": "Create marketing landing page",
+      "description": "Build a landing page for the Chrome extension with SEO best practices",
+      "acceptance_criteria": [
+        "Create index.html with extension overview",
+        "Add hero section with value proposition",
+        "Include feature highlights with icons",
+        "Add Chrome Web Store install button",
+        "Implement responsive design",
+        "Add proper meta tags (title, description, OG)"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "seo-1",
+      "title": "Implement SoftwareApplication schema",
+      "description": "Add structured data for the Chrome extension",
+      "acceptance_criteria": [
+        "Add SoftwareApplication JSON-LD",
+        "Set applicationCategory to BrowserExtension",
+        "Include Chrome Web Store rating",
+        "Add screenshots and icon",
+        "Validate with Rich Results Test"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "aio-1",
+      "title": "Create llms.txt files",
+      "description": "Implement llms.txt for AI discoverability",
+      "acceptance_criteria": [
+        "Create /llms.txt with extension overview",
+        "Include: what it does, how to install, features",
+        "Add Chrome Web Store link",
+        "Describe use cases and benefits"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "seo-2",
+      "title": "Add FAQPage schema",
+      "description": "Create FAQ section with common questions",
+      "acceptance_criteria": [
+        "Create FAQ section on landing page",
+        "Add FAQPage JSON-LD schema",
+        "Include questions about: installation, features, privacy",
+        "Validate with Rich Results Test"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "web-2",
+      "title": "Create privacy policy page",
+      "description": "Add privacy policy page required for Chrome Web Store",
+      "acceptance_criteria": [
+        "Create /privacy page",
+        "Document data collection practices",
+        "Add contact information",
+        "Link from landing page footer"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "seo-3",
+      "title": "Set up robots.txt and sitemap.xml",
+      "description": "Create basic SEO infrastructure files",
+      "acceptance_criteria": [
+        "Create robots.txt allowing all crawlers",
+        "Create sitemap.xml with all pages",
+        "Submit sitemap to Google Search Console"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    }
+  ]
+}

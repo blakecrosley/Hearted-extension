@@ -1,0 +1,48 @@
+# Hearted
+
+> Save anything you love to your personal archive
+
+## Overview
+
+Hearted is a Safari extension for iOS and macOS that lets you save and archive content from your favorite platforms with one click. Build your personal inspiration library from social media and creative platforms.
+
+## Key Features
+
+- One-Click Save: Instant archiving to your personal library
+- Keyboard Shortcut: ⌘+⇧+H for quick saves on Mac
+- Multi-Platform: X/Twitter, Pinterest, Instagram, Midjourney
+- Personal Archive: Your data, stored locally
+- Cross-Device Sync: Optional iCloud sync across Apple devices
+
+## Supported Platforms
+
+- X (Twitter)
+- Pinterest
+- Instagram
+- Midjourney
+
+## How It Works
+
+1. Download Hearted from the App Store (iOS/macOS)
+2. Enable the Safari extension in Settings
+3. Browse your favorite platforms in Safari
+4. Click the heart icon or press ⌘+⇧+H
+5. Content saved to your personal archive
+6. Access your archive anytime in the Hearted app
+
+## Privacy
+
+Your archive is stored locally on your device. No cloud accounts required. Optional iCloud sync uses your personal Apple ID. We collect no data.
+
+## Availability
+
+- iOS: App Store (requires iOS 17+)
+- macOS: App Store (requires macOS 14+)
+- Safari Extension: Included with app
+
+## Contact
+
+- Website: https://h3arted.com
+- Support: https://h3arted.com/support.html
+- Developer: 941 Apps
+- Email: blake@941apps.com
