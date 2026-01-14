@@ -389,6 +389,10 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .heart-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     width: 120px;
     height: 120px;
     background: var(--gradient-primary);
@@ -413,11 +417,11 @@ h1, h2, h3, h4, h5, h6 {
 
 @keyframes pulse {
     0%, 100% {
-        transform: scale(1);
+        transform: translate(-50%, -50%) scale(1);
         box-shadow: 0 0 80px rgba(225, 29, 72, 0.5);
     }
     50% {
-        transform: scale(1.06);
+        transform: translate(-50%, -50%) scale(1.06);
         box-shadow: 0 0 100px rgba(225, 29, 72, 0.65);
     }
 }

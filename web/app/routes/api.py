@@ -54,6 +54,9 @@ async def request_access(email: str = Form(...)):
 
     try:
         resend.api_key = RESEND_API_KEY
+        print(f"[HEARTED] Sending email from: {FROM_EMAIL}")
+        print(f"[HEARTED] API key (first 10 chars): {RESEND_API_KEY[:10]}...")
+
         result = resend.Emails.send({
             "from": FROM_EMAIL,
             "to": [TO_EMAIL],
@@ -72,6 +75,8 @@ async def request_access(email: str = Form(...)):
         return _success_response()
 
     except Exception as e:
+        print(f"[HEARTED] Error type: {type(e).__name__}")
+        print(f"[HEARTED] Error details: {e}")
         logger.error(f"Failed to send signup email: {e}")
         return _error_response("Failed to submit. Please try again.")
 
