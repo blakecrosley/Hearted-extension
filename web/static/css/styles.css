@@ -157,22 +157,53 @@ h1, h2, h3, h4, h5, h6 {
     }
 }
 
-/* Interest Form */
-.interest-form {
-    max-width: 480px;
+/* Hero Label */
+.hero-label {
+    display: inline-block;
+    background: rgba(225, 29, 72, 0.15);
+    color: var(--color-primary);
+    padding: 0.5rem 1rem;
+    border-radius: 100px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: var(--space-md);
+    border: 1px solid rgba(225, 29, 72, 0.3);
 }
 
-.interest-input {
+/* Access Form */
+.access-form-wrapper {
+    max-width: 520px;
+}
+
+.access-form-wrapper--centered {
+    margin: 0 auto;
+}
+
+.access-form {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+}
+
+.access-form--stacked {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.access-input {
+    flex: 1;
     background: var(--color-surface);
     border: 2px solid var(--color-border);
     color: var(--color-text);
-    padding: 1rem 1.25rem;
-    font-size: 1rem;
-    border-radius: 12px;
+    padding: 1rem 1.5rem;
+    font-size: 1.05rem;
+    border-radius: 14px;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.interest-input:focus {
+.access-input:focus {
     background: var(--color-surface);
     border-color: var(--color-primary);
     box-shadow: 0 0 0 4px rgba(225, 29, 72, 0.15);
@@ -180,21 +211,107 @@ h1, h2, h3, h4, h5, h6 {
     outline: none;
 }
 
-.interest-input::placeholder {
+.access-input::placeholder {
     color: var(--color-text-muted);
 }
 
-.interest-btn {
+.access-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: var(--gradient-primary);
+    border: none;
+    color: white;
+    padding: 1rem 1.75rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
     white-space: nowrap;
 }
 
-.interest-success {
-    background: var(--color-surface);
-    border: 2px solid #22C55E;
-    border-radius: 12px;
+.access-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgba(225, 29, 72, 0.4);
+}
+
+.access-btn:active {
+    transform: translateY(0);
+}
+
+.access-btn i {
+    font-size: 1.1rem;
+    transition: transform 0.2s ease;
+}
+
+.access-btn:hover i {
+    transform: translateX(3px);
+}
+
+.hero-fine-print {
+    margin-top: var(--space-md);
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.hero-fine-print i {
+    color: var(--color-primary);
+}
+
+/* Access Response States */
+.access-success {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    background: rgba(34, 197, 94, 0.1);
+    border: 2px solid rgba(34, 197, 94, 0.3);
+    border-radius: 14px;
+    padding: 1.25rem 1.5rem;
+    margin-top: var(--space-sm);
+}
+
+.access-success i {
+    color: #22C55E;
+    font-size: 1.5rem;
+}
+
+.access-success span {
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: #22C55E;
+}
+
+.access-success p {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: 0.95rem;
+}
+
+.access-error {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 2px solid rgba(239, 68, 68, 0.3);
+    border-radius: 14px;
     padding: 1rem 1.5rem;
-    font-size: 1rem;
-    display: inline-block;
+    margin-top: var(--space-sm);
+}
+
+.access-error i {
+    color: #EF4444;
+    font-size: 1.25rem;
+}
+
+.access-error span {
+    color: #EF4444;
+    font-weight: 500;
 }
 
 @keyframes spin {
@@ -414,15 +531,6 @@ kbd {
     font-size: 1.25rem;
 }
 
-.cta-form {
-    max-width: 500px;
-    margin: 0 auto;
-}
-
-.cta-input-wrap {
-    flex: 1;
-    min-width: 200px;
-}
 
 /* Footer */
 .footer {
@@ -493,19 +601,15 @@ kbd {
         padding: var(--space-md);
     }
 
-    .interest-form .d-flex {
+    .access-form {
         flex-direction: column;
     }
 
-    .interest-btn {
+    .access-btn {
         width: 100%;
     }
 
-    .cta-form {
-        flex-direction: column !important;
-    }
-
-    .cta-input-wrap {
-        width: 100%;
+    .hero-fine-print {
+        justify-content: center;
     }
 }

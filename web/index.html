@@ -53,8 +53,8 @@
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css">
 
-    <!-- Alpine.js -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 
     <!-- Custom Styles -->
     <link rel="stylesheet" href="/static/css/styles.css">
@@ -90,60 +90,41 @@
         <div class="container-fluid px-4 px-lg-5">
             <div class="row align-items-center min-vh-100 justify-content-center">
                 <div class="col-xl-5 col-lg-6">
-                    <h1 class="display-3 fw-bold mb-5">
+                    <p class="hero-label">Coming Soon</p>
+                    <h1 class="display-2 fw-bold mb-5">
                         Save Anything<br>You <span class="text-gradient">Love</span>
                     </h1>
                     <p class="lead mb-5 pe-lg-4">
-                        Build your personal inspiration archive. Save content from X, Pinterest,
-                        Instagram, and Midjourney with one click or keyboard shortcut.
+                        Your personal archive for inspiration. One-click saving from X, Pinterest, Instagram, and Midjourney. Private, local, yours.
                     </p>
 
-                    <!-- Interest Signup Form -->
-                    <div class="interest-form mb-5" x-data="{ email: '', submitted: false, sending: false }">
-                        <template x-if="!submitted">
-                            <form
-                                action="https://formspree.io/f/xgvewkpz"
-                                method="POST"
-                                @submit.prevent="sending = true; $el.submit()"
-                                class="d-flex gap-3 flex-wrap"
+                    <!-- Early Access Form -->
+                    <div class="access-form-wrapper">
+                        <form
+                            class="access-form"
+                            hx-post="/api/request-access"
+                            hx-target="#access-response"
+                            hx-swap="innerHTML"
+                        >
+                            <input
+                                type="email"
+                                name="email"
+                                class="access-input"
+                                placeholder="Enter your email"
+                                required
+                                aria-label="Email address"
                             >
-                                <input type="hidden" name="_subject" value="Hearted Interest Signup">
-                                <div class="flex-grow-1">
-                                    <input
-                                        type="email"
-                                        name="email"
-                                        x-model="email"
-                                        class="form-control form-control-lg interest-input"
-                                        placeholder="Enter your email"
-                                        required
-                                        aria-label="Email address"
-                                    >
-                                </div>
-                                <button
-                                    type="submit"
-                                    class="btn btn-primary btn-lg interest-btn"
-                                    :disabled="sending"
-                                >
-                                    <span x-show="!sending">
-                                        <i class="bi bi-envelope-heart me-2"></i>Notify Me
-                                    </span>
-                                    <span x-show="sending">
-                                        <i class="bi bi-arrow-repeat spin me-2"></i>Sending...
-                                    </span>
-                                </button>
-                            </form>
-                        </template>
-                        <template x-if="submitted">
-                            <div class="interest-success">
-                                <i class="bi bi-check-circle-fill text-success me-2"></i>
-                                Thanks! We'll let you know when Hearted is ready.
-                            </div>
-                        </template>
+                            <button type="submit" class="access-btn">
+                                <span class="access-btn-text">Request Early Access</span>
+                                <i class="bi bi-arrow-right"></i>
+                            </button>
+                        </form>
+                        <div id="access-response"></div>
                     </div>
 
-                    <p class="text-muted small">
-                        <i class="bi bi-shield-check me-1"></i>
-                        Coming soon &middot; Free &middot; No spam, just launch updates
+                    <p class="hero-fine-print">
+                        <i class="bi bi-lock-fill me-1"></i>
+                        Limited spots &middot; Free forever &middot; No spam
                     </p>
                 </div>
                 <div class="col-xl-5 col-lg-6 text-center mt-5 mt-lg-0">
@@ -259,52 +240,35 @@
     </section>
 
     <!-- CTA Section -->
-    <section class="cta" x-data="{ email: '', submitted: false, sending: false }">
+    <section class="cta">
         <div class="container-fluid px-4 px-lg-5 text-center">
             <div class="row justify-content-center">
                 <div class="col-xl-6 col-lg-8">
-                    <h2 class="section-title">Be First to Know</h2>
-                    <p class="lead mb-5">Get notified when Hearted launches. Free for iOS and macOS.</p>
+                    <h2 class="section-title">Join the Waitlist</h2>
+                    <p class="lead mb-5">Be among the first to build your personal inspiration archive.</p>
 
-                    <template x-if="!submitted">
+                    <div class="access-form-wrapper access-form-wrapper--centered">
                         <form
-                            action="https://formspree.io/f/xgvewkpz"
-                            method="POST"
-                            @submit.prevent="sending = true; $el.submit()"
-                            class="cta-form d-flex gap-3 flex-wrap justify-content-center"
+                            class="access-form access-form--stacked"
+                            hx-post="/api/request-access"
+                            hx-target="#cta-response"
+                            hx-swap="innerHTML"
                         >
-                            <input type="hidden" name="_subject" value="Hearted Interest Signup (CTA)">
-                            <div class="cta-input-wrap">
-                                <input
-                                    type="email"
-                                    name="email"
-                                    x-model="email"
-                                    class="form-control form-control-lg interest-input"
-                                    placeholder="your@email.com"
-                                    required
-                                    aria-label="Email address"
-                                >
-                            </div>
-                            <button
-                                type="submit"
-                                class="btn btn-primary btn-lg interest-btn"
-                                :disabled="sending"
+                            <input
+                                type="email"
+                                name="email"
+                                class="access-input"
+                                placeholder="your@email.com"
+                                required
+                                aria-label="Email address"
                             >
-                                <span x-show="!sending">
-                                    <i class="bi bi-envelope-heart me-2"></i>Notify Me
-                                </span>
-                                <span x-show="sending">
-                                    <i class="bi bi-arrow-repeat spin me-2"></i>Sending...
-                                </span>
+                            <button type="submit" class="access-btn">
+                                <span class="access-btn-text">Request Early Access</span>
+                                <i class="bi bi-arrow-right"></i>
                             </button>
                         </form>
-                    </template>
-                    <template x-if="submitted">
-                        <div class="interest-success">
-                            <i class="bi bi-check-circle-fill text-success me-2"></i>
-                            Thanks! We'll let you know when Hearted is ready.
-                        </div>
-                    </template>
+                        <div id="cta-response"></div>
+                    </div>
                 </div>
             </div>
         </div>

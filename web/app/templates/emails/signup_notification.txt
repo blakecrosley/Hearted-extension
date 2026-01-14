@@ -1,0 +1,8 @@
+New Early Access Request - Hearted
+===================================
+
+Someone wants early access to Hearted.
+
+Email: {{ email }}
+
+Reply to this email to reach them directly.
