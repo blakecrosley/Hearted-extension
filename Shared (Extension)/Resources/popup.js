@@ -10,12 +10,100 @@ const btnText = document.getElementById('btn-text');
 const status = document.getElementById('status');
 const stats = document.getElementById('stats');
 
+// Settings DOM elements
+const settingsToggle = document.getElementById('settings-toggle');
+const settingsContent = document.getElementById('settings-content');
+const settingsArrow = document.getElementById('settings-arrow');
+const apiKeyInput = document.getElementById('api-key-input');
+const saveApiKeyBtn = document.getElementById('save-api-key-btn');
+const apiKeyStatus = document.getElementById('api-key-status');
+
 // Current tab info
 let currentTab = null;
+
+// Cached API key
+let cachedApiKey = '';
+
+// Helper to get auth headers with API key
+function getAuthHeaders() {
+  const headers = { 'Content-Type': 'application/json' };
+  if (cachedApiKey) {
+    headers['X-API-Key'] = cachedApiKey;
+  }
+  return headers;
+}
+
+// Load API key from storage
+async function loadApiKey() {
+  try {
+    const response = await browser.runtime.sendMessage({ action: 'getApiKey' });
+    if (response.success && response.apiKey) {
+      cachedApiKey = response.apiKey;
+      updateApiKeyStatus(true);
+    } else {
+      updateApiKeyStatus(false);
+    }
+  } catch (e) {
+    console.error('Failed to load API key:', e);
+    updateApiKeyStatus(false);
+  }
+}
+
+// Update API key status display
+function updateApiKeyStatus(isConfigured) {
+  if (isConfigured) {
+    apiKeyStatus.textContent = '✓ API Key configured';
+    apiKeyStatus.className = 'api-key-status configured';
+  } else {
+    apiKeyStatus.textContent = '⚠ API Key not set';
+    apiKeyStatus.className = 'api-key-status missing';
+  }
+}
+
+// Save API key
+async function saveApiKey() {
+  const newKey = apiKeyInput.value.trim();
+  if (!newKey) return;
+
+  try {
+    const response = await browser.runtime.sendMessage({
+      action: 'setApiKey',
+      apiKey: newKey
+    });
+
+    if (response.success) {
+      cachedApiKey = newKey;
+      apiKeyInput.value = '';
+      saveApiKeyBtn.textContent = 'Saved!';
+      saveApiKeyBtn.classList.add('saved');
+      updateApiKeyStatus(true);
+
+      // Reset button after delay
+      setTimeout(() => {
+        saveApiKeyBtn.textContent = 'Save API Key';
+        saveApiKeyBtn.classList.remove('saved');
+      }, 2000);
+
+      // Reload stats with new key
+      loadStats();
+    }
+  } catch (e) {
+    console.error('Failed to save API key:', e);
+  }
+}
+
+// Toggle settings visibility
+function toggleSettings() {
+  settingsContent.classList.toggle('visible');
+  settingsArrow.textContent = settingsContent.classList.contains('visible') ? '▲' : '▼';
+}
 
 // Initialize popup
 async function init() {
   try {
+    // Load API key first
+    await loadApiKey();
+
     // Get current tab
     const tabs = await browser.tabs.query({ active: true, currentWindow: true });
     currentTab = tabs[0];
@@ -45,7 +133,13 @@ async function init() {
 // Check if URL already exists
 async function checkDuplicate(url) {
   try {
-    const response = await fetch(`${API_BASE}/check-duplicate?url=${encodeURIComponent(url)}`);
+    const headers = {};
+    if (cachedApiKey) {
+      headers['X-API-Key'] = cachedApiKey;
+    }
+    const response = await fetch(`${API_BASE}/check-duplicate?url=${encodeURIComponent(url)}`, {
+      headers
+    });
     if (response.ok) {
       const data = await response.json();
       return data.exists;
@@ -71,7 +165,7 @@ async function savePage() {
 
     const response = await fetch(`${API_BASE}/capture`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         url: currentTab.url,
         title: currentTab.title,
@@ -140,10 +234,16 @@ async function extractPageMetadata() {
 // Load archive stats
 async function loadStats() {
   try {
-    const response = await fetch(`${API_BASE}/stats`);
+    const headers = {};
+    if (cachedApiKey) {
+      headers['X-API-Key'] = cachedApiKey;
+    }
+    const response = await fetch(`${API_BASE}/stats`, { headers });
     if (response.ok) {
       const data = await response.json();
       stats.textContent = `${data.total_items || 0} items saved`;
+    } else if (response.status === 401) {
+      stats.textContent = 'Auth required';
     }
   } catch (e) {
     stats.textContent = 'Server offline';
@@ -152,6 +252,11 @@ async function loadStats() {
 
 // Event listeners
 saveBtn.addEventListener('click', savePage);
+settingsToggle.addEventListener('click', toggleSettings);
+saveApiKeyBtn.addEventListener('click', saveApiKey);
+apiKeyInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') saveApiKey();
+});
 
 // Initialize on load
 init();

@@ -53,13 +53,16 @@
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css">
 
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
     <!-- Custom Styles -->
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark fixed-top">
-        <div class="container">
+        <div class="container-fluid px-4 px-lg-5">
             <a class="navbar-brand" href="/">
                 <span class="brand-icon">❤️</span> Hearted
             </a>
@@ -84,30 +87,66 @@
 
     <!-- Hero Section -->
     <section class="hero">
-        <div class="container">
-            <div class="row align-items-center min-vh-100">
-                <div class="col-lg-6">
-                    <h1 class="display-4 fw-bold mb-4">
+        <div class="container-fluid px-4 px-lg-5">
+            <div class="row align-items-center min-vh-100 justify-content-center">
+                <div class="col-xl-5 col-lg-6">
+                    <h1 class="display-3 fw-bold mb-5">
                         Save Anything<br>You <span class="text-gradient">Love</span>
                     </h1>
-                    <p class="lead mb-4">
+                    <p class="lead mb-5 pe-lg-4">
                         Build your personal inspiration archive. Save content from X, Pinterest,
                         Instagram, and Midjourney with one click or keyboard shortcut.
                     </p>
-                    <div class="d-flex gap-3 flex-wrap">
-                        <a href="#" class="btn btn-primary btn-lg">
-                            <i class="bi bi-apple me-2"></i>App Store
-                        </a>
-                        <a href="#features" class="btn btn-outline-light btn-lg">
-                            Learn More
-                        </a>
+
+                    <!-- Interest Signup Form -->
+                    <div class="interest-form mb-5" x-data="{ email: '', submitted: false, sending: false }">
+                        <template x-if="!submitted">
+                            <form
+                                action="https://formspree.io/f/xgvewkpz"
+                                method="POST"
+                                @submit.prevent="sending = true; $el.submit()"
+                                class="d-flex gap-3 flex-wrap"
+                            >
+                                <input type="hidden" name="_subject" value="Hearted Interest Signup">
+                                <div class="flex-grow-1">
+                                    <input
+                                        type="email"
+                                        name="email"
+                                        x-model="email"
+                                        class="form-control form-control-lg interest-input"
+                                        placeholder="Enter your email"
+                                        required
+                                        aria-label="Email address"
+                                    >
+                                </div>
+                                <button
+                                    type="submit"
+                                    class="btn btn-primary btn-lg interest-btn"
+                                    :disabled="sending"
+                                >
+                                    <span x-show="!sending">
+                                        <i class="bi bi-envelope-heart me-2"></i>Notify Me
+                                    </span>
+                                    <span x-show="sending">
+                                        <i class="bi bi-arrow-repeat spin me-2"></i>Sending...
+                                    </span>
+                                </button>
+                            </form>
+                        </template>
+                        <template x-if="submitted">
+                            <div class="interest-success">
+                                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                Thanks! We'll let you know when Hearted is ready.
+                            </div>
+                        </template>
                     </div>
-                    <p class="text-muted mt-3 small">
+
+                    <p class="text-muted small">
                         <i class="bi bi-shield-check me-1"></i>
-                        Free &middot; No account required &middot; Your data stays local
+                        Coming soon &middot; Free &middot; No spam, just launch updates
                     </p>
                 </div>
-                <div class="col-lg-6 text-center">
+                <div class="col-xl-5 col-lg-6 text-center mt-5 mt-lg-0">
                     <div class="hero-visual">
                         <div class="floating-card card-1">
                             <i class="bi bi-twitter-x"></i>
@@ -131,44 +170,48 @@
     </section>
 
     <!-- Features Section -->
-    <section id="features" class="features py-5">
-        <div class="container">
-            <h2 class="text-center mb-5">How It Works</h2>
-            <div class="row g-4">
-                <div class="col-md-6 col-lg-3">
-                    <div class="feature-card text-center">
-                        <div class="feature-icon">
-                            <i class="bi bi-cursor-fill"></i>
+    <section id="features" class="features">
+        <div class="container-fluid px-4 px-lg-5">
+            <div class="row justify-content-center">
+                <div class="col-xl-10">
+                    <h2 class="text-center section-title">How It Works</h2>
+                    <div class="row g-5">
+                        <div class="col-md-6 col-lg-3">
+                            <div class="feature-card text-center">
+                                <div class="feature-icon">
+                                    <i class="bi bi-cursor-fill"></i>
+                                </div>
+                                <h3>One-Click Save</h3>
+                                <p>Click the heart icon on any supported content to instantly save it to your archive.</p>
+                            </div>
                         </div>
-                        <h3>One-Click Save</h3>
-                        <p>Click the heart icon on any supported content to instantly save it to your archive.</p>
-                    </div>
-                </div>
-                <div class="col-md-6 col-lg-3">
-                    <div class="feature-card text-center">
-                        <div class="feature-icon">
-                            <i class="bi bi-keyboard"></i>
+                        <div class="col-md-6 col-lg-3">
+                            <div class="feature-card text-center">
+                                <div class="feature-icon">
+                                    <i class="bi bi-keyboard"></i>
+                                </div>
+                                <h3>Keyboard Shortcut</h3>
+                                <p>Press <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>H</kbd> for lightning-fast saves.</p>
+                            </div>
                         </div>
-                        <h3>Keyboard Shortcut</h3>
-                        <p>Press <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>H</kbd> for lightning-fast saves.</p>
-                    </div>
-                </div>
-                <div class="col-md-6 col-lg-3">
-                    <div class="feature-card text-center">
-                        <div class="feature-icon">
-                            <i class="bi bi-collection"></i>
+                        <div class="col-md-6 col-lg-3">
+                            <div class="feature-card text-center">
+                                <div class="feature-icon">
+                                    <i class="bi bi-collection"></i>
+                                </div>
+                                <h3>Personal Archive</h3>
+                                <p>All your saved content in one beautiful, searchable library.</p>
+                            </div>
                         </div>
-                        <h3>Personal Archive</h3>
-                        <p>All your saved content in one beautiful, searchable library.</p>
-                    </div>
-                </div>
-                <div class="col-md-6 col-lg-3">
-                    <div class="feature-card text-center">
-                        <div class="feature-icon">
-                            <i class="bi bi-shield-lock"></i>
+                        <div class="col-md-6 col-lg-3">
+                            <div class="feature-card text-center">
+                                <div class="feature-icon">
+                                    <i class="bi bi-shield-lock"></i>
+                                </div>
+                                <h3>100% Private</h3>
+                                <p>Your archive lives on your device. No cloud, no tracking, no accounts.</p>
+                            </div>
                         </div>
-                        <h3>100% Private</h3>
-                        <p>Your archive lives on your device. No cloud, no tracking, no accounts.</p>
                     </div>
                 </div>
             </div>
@@ -176,62 +219,107 @@
     </section>
 
     <!-- Platforms Section -->
-    <section id="platforms" class="platforms py-5">
-        <div class="container">
-            <h2 class="text-center mb-5">Supported Platforms</h2>
-            <div class="row justify-content-center g-4">
-                <div class="col-6 col-md-3">
-                    <div class="platform-card text-center">
-                        <i class="bi bi-twitter-x"></i>
-                        <span>X / Twitter</span>
+    <section id="platforms" class="platforms">
+        <div class="container-fluid px-4 px-lg-5">
+            <div class="row justify-content-center">
+                <div class="col-xl-8">
+                    <h2 class="text-center section-title">Supported Platforms</h2>
+                    <div class="row justify-content-center g-5">
+                        <div class="col-6 col-md-3">
+                            <div class="platform-card text-center">
+                                <i class="bi bi-twitter-x"></i>
+                                <span>X / Twitter</span>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="platform-card text-center">
+                                <i class="bi bi-pinterest"></i>
+                                <span>Pinterest</span>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="platform-card text-center">
+                                <i class="bi bi-instagram"></i>
+                                <span>Instagram</span>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="platform-card text-center">
+                                <span class="mj-icon-large">MJ</span>
+                                <span>Midjourney</span>
+                            </div>
+                        </div>
                     </div>
-                </div>
-                <div class="col-6 col-md-3">
-                    <div class="platform-card text-center">
-                        <i class="bi bi-pinterest"></i>
-                        <span>Pinterest</span>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3">
-                    <div class="platform-card text-center">
-                        <i class="bi bi-instagram"></i>
-                        <span>Instagram</span>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3">
-                    <div class="platform-card text-center">
-                        <span class="mj-icon-large">MJ</span>
-                        <span>Midjourney</span>
-                    </div>
+                    <p class="text-center text-muted mt-5">
+                        More platforms coming soon
+                    </p>
                 </div>
             </div>
-            <p class="text-center text-muted mt-4">
-                More platforms coming soon
-            </p>
         </div>
     </section>
 
     <!-- CTA Section -->
-    <section class="cta py-5">
-        <div class="container text-center">
-            <h2 class="mb-4">Start Building Your Archive</h2>
-            <p class="lead mb-4">Free on iOS and macOS. Safari extension included.</p>
-            <a href="#" class="btn btn-primary btn-lg">
-                <i class="bi bi-apple me-2"></i>Download on the App Store
-            </a>
+    <section class="cta" x-data="{ email: '', submitted: false, sending: false }">
+        <div class="container-fluid px-4 px-lg-5 text-center">
+            <div class="row justify-content-center">
+                <div class="col-xl-6 col-lg-8">
+                    <h2 class="section-title">Be First to Know</h2>
+                    <p class="lead mb-5">Get notified when Hearted launches. Free for iOS and macOS.</p>
+
+                    <template x-if="!submitted">
+                        <form
+                            action="https://formspree.io/f/xgvewkpz"
+                            method="POST"
+                            @submit.prevent="sending = true; $el.submit()"
+                            class="cta-form d-flex gap-3 flex-wrap justify-content-center"
+                        >
+                            <input type="hidden" name="_subject" value="Hearted Interest Signup (CTA)">
+                            <div class="cta-input-wrap">
+                                <input
+                                    type="email"
+                                    name="email"
+                                    x-model="email"
+                                    class="form-control form-control-lg interest-input"
+                                    placeholder="your@email.com"
+                                    required
+                                    aria-label="Email address"
+                                >
+                            </div>
+                            <button
+                                type="submit"
+                                class="btn btn-primary btn-lg interest-btn"
+                                :disabled="sending"
+                            >
+                                <span x-show="!sending">
+                                    <i class="bi bi-envelope-heart me-2"></i>Notify Me
+                                </span>
+                                <span x-show="sending">
+                                    <i class="bi bi-arrow-repeat spin me-2"></i>Sending...
+                                </span>
+                            </button>
+                        </form>
+                    </template>
+                    <template x-if="submitted">
+                        <div class="interest-success">
+                            <i class="bi bi-check-circle-fill text-success me-2"></i>
+                            Thanks! We'll let you know when Hearted is ready.
+                        </div>
+                    </template>
+                </div>
+            </div>
         </div>
     </section>
 
     <!-- Footer -->
-    <footer class="footer py-4">
-        <div class="container">
+    <footer class="footer">
+        <div class="container-fluid px-4 px-lg-5">
             <div class="row align-items-center">
                 <div class="col-md-6 text-center text-md-start mb-3 mb-md-0">
-                    <span class="text-muted">&copy; 2024 941 Apps. All rights reserved.</span>
+                    <span class="text-muted">&copy; 2025 941 Apps. All rights reserved.</span>
                 </div>
                 <div class="col-md-6 text-center text-md-end">
-                    <a href="/privacy.html" class="text-muted me-3">Privacy</a>
-                    <a href="/support.html" class="text-muted me-3">Support</a>
+                    <a href="/privacy.html" class="text-muted me-4">Privacy</a>
+                    <a href="/support.html" class="text-muted me-4">Support</a>
                     <a href="mailto:blake@941apps.com" class="text-muted">Contact</a>
                 </div>
             </div>

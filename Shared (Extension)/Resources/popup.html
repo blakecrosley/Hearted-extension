@@ -150,6 +150,91 @@
       color: rgba(255,255,255,0.4);
     }
 
+    .settings-section {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .settings-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      font-size: 12px;
+      color: rgba(255,255,255,0.6);
+    }
+
+    .settings-toggle:hover {
+      color: rgba(255,255,255,0.8);
+    }
+
+    .settings-content {
+      display: none;
+      margin-top: 12px;
+    }
+
+    .settings-content.visible {
+      display: block;
+    }
+
+    .api-key-input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.05);
+      color: #fff;
+      font-size: 12px;
+      font-family: monospace;
+    }
+
+    .api-key-input::placeholder {
+      color: rgba(255,255,255,0.3);
+    }
+
+    .api-key-input:focus {
+      outline: none;
+      border-color: #e91e63;
+    }
+
+    .save-api-key-btn {
+      width: 100%;
+      margin-top: 8px;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .save-api-key-btn:hover {
+      background: rgba(255,255,255,0.15);
+    }
+
+    .save-api-key-btn.saved {
+      background: rgba(76, 175, 80, 0.3);
+      color: #4caf50;
+    }
+
+    .api-key-status {
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      margin-top: 8px;
+      text-align: center;
+    }
+
+    .api-key-status.configured {
+      color: #4caf50;
+    }
+
+    .api-key-status.missing {
+      color: #ff9800;
+    }
+
     .keyboard-hint {
       font-size: 11px;
       color: rgba(255,255,255,0.4);
@@ -190,6 +275,22 @@
 
     <div class="keyboard-hint">
       Quick save: <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>H</kbd>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-toggle" id="settings-toggle">
+        <span>⚙️ Settings</span>
+        <span id="settings-arrow">▼</span>
+      </div>
+      <div class="settings-content" id="settings-content">
+        <input type="password"
+               class="api-key-input"
+               id="api-key-input"
+               placeholder="Enter API Key..."
+               autocomplete="off">
+        <button class="save-api-key-btn" id="save-api-key-btn">Save API Key</button>
+        <div class="api-key-status" id="api-key-status"></div>
+      </div>
     </div>
   </div>
 
