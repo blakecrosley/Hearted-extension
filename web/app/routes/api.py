@@ -16,7 +16,7 @@ router = APIRouter()
 
 # Resend configuration
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
-FROM_EMAIL = os.getenv("HEARTED_FROM_EMAIL", "hello@mail.blakecrosley.com")
+FROM_EMAIL = os.getenv("HEARTED_FROM_EMAIL", "hello@mail.h3arted.com")
 TO_EMAIL = os.getenv("HEARTED_TO_EMAIL", "blake@941apps.com")
 
 # Email templates
