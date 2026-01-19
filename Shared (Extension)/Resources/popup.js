@@ -1,6 +1,6 @@
 // Hearted - Extension Popup Script
 
-const API_BASE = 'http://localhost:8100/api';
+const API_BASE = 'https://h3arted.com/api';
 
 // DOM elements
 const pageTitle = document.getElementById('page-title');

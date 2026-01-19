@@ -1,7 +1,7 @@
 // Hearted - Background Service Worker
 // Handles communication between content scripts and the local API
 
-const API_BASE = 'http://localhost:8100/api';
+const API_BASE = 'https://h3arted.com/api';
 
 // Get stored API key from browser storage
 async function getApiKey() {
