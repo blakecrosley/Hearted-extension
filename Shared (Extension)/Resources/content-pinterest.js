@@ -120,7 +120,7 @@
         data: pinData
       }, response => {
         if (response?.success) {
-          CAPTURED_PINS.add(pinData.source_id);
+          // source_id already added to CAPTURED_PINS before this call
           captureCount++;
           resolve(response.data);
         } else {
@@ -172,6 +172,8 @@
     for (const pin of pins) {
       const pinData = extractPinData(pin);
       if (pinData) {
+        // Mark as captured IMMEDIATELY to prevent race conditions
+        CAPTURED_PINS.add(pinData.source_id);
         try {
           await capturePin(pinData);
           // Add visual indicator
@@ -179,6 +181,8 @@
           pin.style.outlineOffset = '-3px';
         } catch (e) {
           console.error('Hearted: Failed to capture pin', e);
+          // Remove from set if capture failed so it can be retried
+          CAPTURED_PINS.delete(pinData.source_id);
         }
       }
     }

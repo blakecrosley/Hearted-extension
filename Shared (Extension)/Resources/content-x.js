@@ -137,7 +137,7 @@
         data: tweetData
       }, response => {
         if (response?.success) {
-          CAPTURED_TWEETS.add(tweetData.url);
+          // URL already added to CAPTURED_TWEETS before this call
           captureCount++;
           updateBadge();
           resolve(response.data);
@@ -157,12 +157,17 @@
     for (const article of articles) {
       const tweetData = extractTweetData(article);
       if (tweetData) {
+        // Mark as captured IMMEDIATELY to prevent race conditions
+        // (before async capture completes)
+        CAPTURED_TWEETS.add(tweetData.url);
         try {
           await captureTweet(tweetData);
           // Add visual indicator
           article.style.borderLeft = '3px solid #e91e63';
         } catch (e) {
           console.error('Hearted: Failed to capture tweet', e);
+          // Remove from set if capture failed so it can be retried
+          CAPTURED_TWEETS.delete(tweetData.url);
         }
       }
     }

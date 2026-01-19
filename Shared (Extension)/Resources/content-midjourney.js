@@ -350,7 +350,7 @@
           }
 
           if (response?.success) {
-            CAPTURED_JOBS.add(imageData.source_id);
+            // source_id already added to CAPTURED_JOBS before this call
             captureCount++;
             console.log('Hearted: Capture successful!');
             resolve(response.data);
@@ -374,6 +374,8 @@
     console.log('Hearted: Extracted data:', JSON.stringify(data, null, 2));
 
     if (data && !CAPTURED_JOBS.has(data.source_id)) {
+      // Mark as captured IMMEDIATELY to prevent race conditions
+      CAPTURED_JOBS.add(data.source_id);
       try {
         await captureImage(data);
 
@@ -398,6 +400,8 @@
         return true;
       } catch (e) {
         console.error('Hearted: Failed to capture', e);
+        // Remove from set if capture failed so it can be retried
+        CAPTURED_JOBS.delete(data.source_id);
         showToast('❌ Failed to capture: ' + e.message, true);
         return false;
       }
