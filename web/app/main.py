@@ -8,7 +8,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routes import api
+from app.routes import api, export
+from app.security.logging import SecurityLogMiddleware
 
 # Paths
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -17,15 +18,19 @@ STATIC_DIR = BASE_DIR / "static"
 app = FastAPI(
     title="Hearted",
     description="Save anything you love",
-    docs_url=None,
-    redoc_url=None,
+    docs_url="/api/docs",  # Enable docs for API development
+    redoc_url="/api/redoc",
 )
+
+# Security logging middleware (ships to Axiom)
+app.add_middleware(SecurityLogMiddleware, site_name="h3arted.com")
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # Include API routes
 app.include_router(api.router, prefix="/api")
+app.include_router(export.router, prefix="/api")
 
 
 @app.get("/", response_class=HTMLResponse)
