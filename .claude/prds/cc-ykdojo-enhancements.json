@@ -1,0 +1,105 @@
+{
+  "project": {
+    "name": "Claude Code - ykdojo-Inspired Enhancements",
+    "description": "Implement high-value patterns from ykdojo/claude-code-tips repository",
+    "owner": "Blake Crosley",
+    "created": "2026-01-19",
+    "priority": "high",
+    "tags": ["claude-code", "configuration", "commands", "documentation"],
+    "source": "https://github.com/ykdojo/claude-code-tips"
+  },
+  "stories": [
+    {
+      "id": "CFG-1",
+      "title": "Add ENABLE_TOOL_SEARCH to settings.json",
+      "description": "Enable lazy-loading of MCP tools to reduce context overhead. With multiple MCP servers (GitHub, Cloudflare, Playwright, Context7, Chrome), this saves ~10% context.",
+      "acceptance_criteria": [
+        "Add ENABLE_TOOL_SEARCH: true to env section of settings.json",
+        "Verify Claude Code still loads and MCP tools work",
+        "Document the setting's purpose in a comment"
+      ],
+      "files_to_modify": ["~/.claude/settings.json"],
+      "priority": 1,
+      "passes": true,
+      "attempts": 1,
+      "notes": "Added ENABLE_TOOL_SEARCH: true to env section of settings.json"
+    },
+    {
+      "id": "CMD-1",
+      "title": "Create /handoff Command",
+      "description": "Create a command for generating structured handoff documents for session continuity. Better than ad-hoc session management.",
+      "acceptance_criteria": [
+        "Creates HANDOFF.md in project root with standard sections",
+        "Sections: Goal, Current Progress, What Worked, What Didn't, Next Steps",
+        "Updates existing HANDOFF.md if present",
+        "Command works in any project directory"
+      ],
+      "files_to_modify": ["~/.claude/commands/handoff.md"],
+      "priority": 1,
+      "passes": true,
+      "attempts": 1,
+      "notes": "Created handoff.md with structured template for Goal, Progress, What Worked/Didn't, Next Steps, Key Files"
+    },
+    {
+      "id": "CMD-2",
+      "title": "Create /gha Command",
+      "description": "Create a command for debugging GitHub Actions failures systematically. Checks flakiness first, identifies breaking commit, then root cause.",
+      "acceptance_criteria": [
+        "Accepts GitHub Actions URL as argument",
+        "Checks for flakiness (past 10-20 runs of same job)",
+        "Identifies potential breaking commit",
+        "Provides root cause analysis",
+        "Checks for existing fix PRs"
+      ],
+      "files_to_modify": ["~/.claude/commands/gha.md"],
+      "priority": 1,
+      "passes": true,
+      "attempts": 1,
+      "notes": "Created gha.md with 5-step workflow: Get Info, Check Flakiness, Identify Breaking Commit, Root Cause, Check Existing Fixes"
+    },
+    {
+      "id": "DOC-1",
+      "title": "Document ENABLE_TOOL_SEARCH in cc-guide",
+      "description": "Add documentation for the ENABLE_TOOL_SEARCH environment variable in the Claude Code guide's MCP section.",
+      "acceptance_criteria": [
+        "Explain what ENABLE_TOOL_SEARCH does",
+        "Show how to set it (env var or settings.json)",
+        "Explain when to use it (many MCP servers)",
+        "Add to appropriate section near auto:N docs"
+      ],
+      "files_to_modify": ["~/Projects/blakecrosley.com/content/guides/claude-code.md"],
+      "priority": 2,
+      "passes": true,
+      "attempts": 1,
+      "notes": "Added ENABLE_TOOL_SEARCH env var documentation to MCP Tool Search section at line 1304"
+    },
+    {
+      "id": "RULE-1",
+      "title": "Add Chrome Best Practices to corrections.md",
+      "description": "Add specific rules for Claude-in-Chrome usage: use refs not coordinates, avoid screenshots unless requested.",
+      "acceptance_criteria": [
+        "Add Chrome MCP section to corrections.md",
+        "Document: use read_page for refs, click with ref not coordinates",
+        "Document: never screenshot unless explicitly requested",
+        "Keep rules concise"
+      ],
+      "files_to_modify": ["~/.claude/rules/corrections.md"],
+      "priority": 2,
+      "passes": true,
+      "attempts": 1,
+      "notes": "Added Chrome MCP section with 4 rules: use refs, no coordinates, no screenshots, avoid alerts"
+    }
+  ],
+  "dependencies": {
+    "CFG-1": [],
+    "CMD-1": [],
+    "CMD-2": [],
+    "DOC-1": ["CFG-1"],
+    "RULE-1": []
+  },
+  "technical_notes": {
+    "enable_tool_search": "When true, MCP tools are lazy-loaded instead of injected upfront. Reduces context overhead ~10%.",
+    "handoff_pattern": "Structured document for context continuity across sessions. More reliable than relying on session resume.",
+    "gha_workflow": "Systematic debugging: flakiness check -> breaking commit -> root cause. Prevents chasing red herrings."
+  }
+}
