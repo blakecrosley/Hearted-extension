@@ -55,3 +55,34 @@ async def privacy():
 async def health():
     """Health check endpoint."""
     return {"status": "ok"}
+
+
+# SEO & AI Discovery Files
+@app.get("/robots.txt")
+async def robots_txt():
+    """Serve robots.txt for search engines."""
+    return FileResponse(
+        BASE_DIR / "robots.txt",
+        media_type="text/plain",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@app.get("/sitemap.xml")
+async def sitemap_xml():
+    """Serve sitemap.xml for search engines."""
+    return FileResponse(
+        BASE_DIR / "sitemap.xml",
+        media_type="application/xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@app.get("/llms.txt")
+async def llms_txt():
+    """Serve llms.txt for AI systems per llmstxt.org specification."""
+    return FileResponse(
+        BASE_DIR / "llms.txt",
+        media_type="text/plain",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
