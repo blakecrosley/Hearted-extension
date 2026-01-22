@@ -29,6 +29,36 @@
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
+        "@type": "Organization",
+        "@id": "https://h3arted.com/#organization",
+        "name": "941 Apps",
+        "url": "https://941apps.com",
+        "logo": "https://h3arted.com/static/images/app-icon.png",
+        "sameAs": [
+            "https://941apps.com"
+        ]
+    }
+    </script>
+
+    <!-- WebSite Schema -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "@id": "https://h3arted.com/#website",
+        "name": "Hearted",
+        "url": "https://h3arted.com",
+        "description": "Safari extension for saving and archiving content from social media",
+        "publisher": {
+            "@id": "https://h3arted.com/#organization"
+        }
+    }
+    </script>
+
+    <!-- SoftwareApplication Schema -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "Hearted",
         "applicationCategory": "BrowserApplication",
@@ -40,9 +70,7 @@
         },
         "description": "Safari extension for saving and archiving content from X, Pinterest, Instagram, and Midjourney",
         "author": {
-            "@type": "Organization",
-            "name": "941 Apps",
-            "url": "https://941apps.com"
+            "@id": "https://h3arted.com/#organization"
         }
     }
     </script>

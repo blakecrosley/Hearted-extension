@@ -1,0 +1,127 @@
+# Hearted - Complete Documentation
+
+> Safari extension for saving and archiving your favorite content from social media and creative platforms.
+
+For summary version, see: [llms.txt](https://h3arted.com/llms.txt)
+
+## Product Overview
+
+Hearted is a privacy-first Safari extension for iOS and macOS that lets you archive content you've liked, saved, or want to reference later. All data stays on your device - no accounts, no cloud tracking.
+
+## How It Works
+
+1. **Install**: Download from App Store and enable Safari extension
+2. **Browse**: Visit supported platforms normally
+3. **Save**: Tap the Hearted icon to archive any supported content
+4. **Organize**: Tag and categorize your saved content
+5. **Export**: Export your archive as JSON or Markdown
+
+## Supported Platforms
+
+### X (Twitter)
+- Tweets and threads
+- Images and videos
+- User profiles
+- Bookmarks sync
+
+### Pinterest
+- Individual pins
+- Board collections
+- Saved ideas
+
+### Instagram
+- Posts and reels
+- Stories (before expiration)
+- Saved collections
+
+### Midjourney
+- Generated images
+- Prompt history
+- Variations and upscales
+
+## Key Features
+
+### Privacy-First Architecture
+- **Local Storage**: All data stored on-device using SwiftData
+- **No Tracking**: Zero analytics or telemetry
+- **No Accounts**: Works with just your Apple ID (optional iCloud sync)
+- **No External Servers**: Content never leaves your device
+
+### Organization
+- **Tags**: Create custom tags for categorization
+- **Search**: Full-text search across all saved content
+- **Filters**: Filter by platform, date, or tags
+- **Collections**: Group related content together
+
+### Export Options
+- **JSON**: Full structured export for data portability
+- **Markdown**: Human-readable format for notes
+- **Claude Code Integration**: Export for AI analysis
+
+### Cross-Platform
+- **iOS**: iPhone and iPad support
+- **macOS**: Mac Safari extension
+- **iCloud Sync**: Optional sync between devices
+
+## Technical Details
+
+### Requirements
+- iOS 17.0+ or macOS 14.0+
+- Safari browser
+- Approximately 50MB storage
+
+### Architecture
+- SwiftUI native interface
+- SwiftData for local persistence
+- Safari Web Extension APIs
+- Optional CloudKit for sync
+
+### Privacy Manifest
+Hearted includes an iOS Privacy Manifest declaring:
+- No tracking domains
+- No third-party analytics
+- Local storage only
+
+## Use Cases
+
+### For Creators
+- Build inspiration archives
+- Save reference material
+- Track creative trends
+- Export prompts for AI tools
+
+### For Researchers
+- Archive social content before deletion
+- Organize research materials
+- Export structured data
+- Build personal knowledge bases
+
+### For General Users
+- Save content to read later
+- Organize bookmarks across platforms
+- Back up important content locally
+- Keep content private and portable
+
+## Pricing
+
+- **Free**: Core functionality at no cost
+- **No Subscription**: One-time download
+- **No In-App Purchases**: All features included
+
+## Contact Information
+
+- Website: https://h3arted.com
+- Support: https://h3arted.com/support.html
+- Privacy Policy: https://h3arted.com/privacy.html
+- Developer: 941 Apps (https://941apps.com)
+- Email: blake@941apps.com
+
+## Related Resources
+
+- App Store: Search "Hearted" (iOS/macOS)
+- Developer: https://941apps.com
+- Other Apps: https://941apps.com/#apps
+
+---
+
+Last updated: January 2026

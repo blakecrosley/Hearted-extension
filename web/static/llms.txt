@@ -2,6 +2,8 @@
 
 > Save anything you love to your personal archive
 
+For comprehensive documentation, see: [llms-full.txt](https://h3arted.com/llms-full.txt)
+
 ## Overview
 
 Hearted is a Safari extension for iOS and macOS that lets you save and archive content from your favorite platforms with one click. Build your personal inspiration library from social media and creative platforms.
@@ -46,3 +48,7 @@ Your archive is stored locally on your device. No cloud accounts required. Optio
 - Support: https://h3arted.com/support.html
 - Developer: 941 Apps
 - Email: blake@941apps.com
+
+---
+
+Last updated: January 2026
