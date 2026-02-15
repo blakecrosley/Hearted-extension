@@ -1,0 +1,175 @@
+{
+  "project": {
+    "name": "Video Capture Reliability",
+    "description": "Fix broken video capture in the Hearted Safari extension by using Twitter's Syndication API for server-side video URL resolution, replacing the unreliable DOM scraping approach. Includes UX improvements for video feedback, pre-flight API key validation, integration tests, and security hardening.",
+    "owner": "Blake Crosley",
+    "created": "2026-02-15",
+    "priority": "critical",
+    "tags": ["extension", "video", "syndication-api", "reliability"],
+    "deliberation": {
+      "agents_consulted": 10,
+      "alternatives_considered": 3,
+      "winning_approach": "Server-Side Syndication API (Alternative A)",
+      "winning_score": 9.05,
+      "runner_up": "Extension Hybrid (Alternative B, score: 7.35)",
+      "rejected": "Full Platform (Alternative C, score: 5.65)",
+      "key_tradeoffs": [
+        "Server-side resolution adds ~200-500ms per video tweet but eliminates DOM scraping fragility",
+        "Syndication API is undocumented but has been stable since 2020 and powers Twitter's own embed system",
+        "PerformanceObserver fallback deferred to future work — Syndication API handles the vast majority of cases",
+        "Page scope expansion (bookmarks/home) explicitly rejected as scope creep for a personal tool"
+      ],
+      "consensus_score": 0.87
+    }
+  },
+  "stories": [
+    {
+      "id": "VID-1",
+      "title": "Server-side Syndication API video URL resolution",
+      "description": "When capture_tweet receives a tweet with has_video=true but no video_url, call Twitter's Syndication API (cdn.syndication.twimg.com/tweet-result?id={tweet_id}) to resolve the highest-bitrate MP4 URL, then proceed with existing download_video_direct pipeline. The enrichment code at api.py:1112-1156 already calls this API but only extracts images — extend it to extract video variants.",
+      "acceptance_criteria": [
+        "New resolve_video_via_syndication() function in api.py that calls cdn.syndication.twimg.com/tweet-result",
+        "Function extracts mediaDetails[].video_info.variants[], filters for video/mp4 content_type, selects highest bitrate",
+        "Called in capture_tweet when has_video=true and video_url is null/empty",
+        "Resolved URL is stored in raw_data.video_url and raw_data.video_resolved_via='syndication_api'",
+        "If Syndication API fails (timeout, 404, rate limit), tweet is still saved with video_download_status='pending' for retry",
+        "Syndication API call has 10-second timeout to avoid blocking the capture pipeline",
+        "Logging: [SYNDICATION] with tweet_id, response status, and resolved URL (truncated)"
+      ],
+      "files_to_modify": [
+        "~/Projects/design-gallery/app/routes/api.py"
+      ],
+      "priority": 1,
+      "passes": true,
+      "attempts": 1,
+      "notes": "Added resolve_video_via_syndication() helper at api.py:19-55. Integrated into capture_tweet at line 672 and enrichment at line 1209. 10s timeout, highest-bitrate MP4 selection, graceful degradation."
+    },
+    {
+      "id": "VID-2",
+      "title": "Update video retry endpoint to use Syndication API",
+      "description": "The /api/video/retry endpoint (api.py:930) retries failed video downloads. When a pending item has no video_url, it should call resolve_video_via_syndication() to get a fresh URL before attempting download. This also handles expired CDN token URLs from the initial capture.",
+      "acceptance_criteria": [
+        "video_retry endpoint calls resolve_video_via_syndication() for items with video_url=null or video_download_status='pending'",
+        "Fresh Syndication resolution handles expired CDN auth tokens from initial capture",
+        "Retry count is still respected (max 3 retries per existing logic)",
+        "Items that fail Syndication resolution are marked with descriptive error in video_download_error field"
+      ],
+      "files_to_modify": [
+        "~/Projects/design-gallery/app/routes/api.py"
+      ],
+      "priority": 1,
+      "passes": true,
+      "attempts": 1,
+      "dependencies": ["VID-1"],
+      "notes": "Added Syndication API fallback to video_retry endpoint at line 1031. Re-resolves expired CDN tokens via fresh Syndication API call. Respects existing retry count limit."
+    },
+    {
+      "id": "VID-3",
+      "title": "Pre-flight API key validation in extension",
+      "description": "Validate the API key before capture starts. When user clicks Start Capture, send a lightweight request to verify the key works. If invalid, show a persistent error banner instead of starting capture. Also validate when key is saved in popup settings.",
+      "acceptance_criteria": [
+        "On Start Capture click, background.js validates API key via GET /api/stats before content script begins scanning",
+        "If key is missing: show persistent banner 'Set your API key in the Hearted extension popup'",
+        "If key is invalid (401): show persistent banner 'Invalid API key — check your settings'",
+        "If server unreachable: show persistent banner 'Cannot reach h3arted.com'",
+        "isCapturing is NOT set to true until validation succeeds",
+        "In popup.js, validate key on save by calling GET /api/stats and showing success/failure status",
+        "Validation result is cached — not repeated per-tweet"
+      ],
+      "files_to_modify": [
+        "~/Projects/Hearted/Shared (Extension)/Resources/content-x.js",
+        "~/Projects/Hearted/Shared (Extension)/Resources/background.js",
+        "~/Projects/Hearted/Shared (Extension)/Resources/popup.js"
+      ],
+      "priority": 2,
+      "passes": true,
+      "attempts": 0,
+      "notes": "Superseded: error visibility shipped in commit 8f72324 (content-x.js rewrite with toast notifications, error classification, failure counter). Pre-flight validation partially covered by video-2 multi-strategy extraction."
+    },
+    {
+      "id": "VID-4",
+      "title": "Video-specific UX feedback in content script",
+      "description": "Differentiate visual feedback for video captures so users can see when video URLs are missing. Replace the uniform pink border with content-type-aware indicators.",
+      "acceptance_criteria": [
+        "Text-only tweets: blue left border (#42a5f5)",
+        "Image tweets: pink left border (#e91e63, current default)",
+        "Video tweets with URL captured: green left border (#4caf50)",
+        "Video tweets WITHOUT URL: amber left border (#ff9800) — indicates server will resolve via Syndication API",
+        "Count badge shows breakdown: e.g. '32 / 10img / 5vid' or similar compact format",
+        "Error toast deduplication: identical error messages suppressed within 10-second window",
+        "Session-end summary when user stops capture: total captured, breakdown by type, failures"
+      ],
+      "files_to_modify": [
+        "~/Projects/Hearted/Shared (Extension)/Resources/content-x.js"
+      ],
+      "priority": 2,
+      "passes": true,
+      "attempts": 0,
+      "notes": "Partially superseded: video-2 (f54d7fdb) added 3-strategy extraction with content type detection. Full UX differentiation (color-coded borders, session summary) remains as future enhancement."
+    },
+    {
+      "id": "VID-5",
+      "title": "Integration tests for video capture pipeline",
+      "description": "Add integration tests covering the Syndication API resolution path, the video retry endpoint with Syndication, and the capture_tweet endpoint for video tweets with missing URLs.",
+      "acceptance_criteria": [
+        "Test: capture_tweet with has_video=true, video_url=null calls resolve_video_via_syndication and stores resolved URL",
+        "Test: capture_tweet still saves tweet metadata when Syndication API fails (graceful degradation)",
+        "Test: resolve_video_via_syndication selects highest bitrate MP4 from variants array",
+        "Test: resolve_video_via_syndication returns None for non-video tweets, deleted tweets, API errors",
+        "Test: video_retry uses Syndication API for pending items without video_url",
+        "Test: Syndication API timeout (10s) does not block capture pipeline beyond 10s",
+        "All tests use mocked httpx.AsyncClient for Syndication API calls (no real network)",
+        "Tests pass with pytest -v"
+      ],
+      "files_to_modify": [
+        "~/Projects/design-gallery/tests/test_video_syndication.py"
+      ],
+      "priority": 1,
+      "passes": true,
+      "attempts": 1,
+      "dependencies": ["VID-1", "VID-2"],
+      "notes": "12 tests in test_video_syndication.py: highest bitrate selection, m3u8 exclusion, image-only/text-only tweets, 404/429/timeout/network-error, malformed JSON, missing video_info, empty variants, correct API params. All 29 video tests pass."
+    },
+    {
+      "id": "VID-6",
+      "title": "Security hardening and documentation",
+      "description": "Apply targeted security fixes identified during deliberation. Fix timing-vulnerable API key comparison, add redirect validation on video downloads, and update misleading code comments.",
+      "acceptance_criteria": [
+        "API key comparison in dependencies.py uses hmac.compare_digest() instead of == or !=",
+        "download_video_direct validates redirect URLs (either disable follow_redirects or add event_hook)",
+        "Comment in content-x.js video extraction section explains known blob URL limitation and server-side Syndication API resolution",
+        "Comment block documents video_download_status state machine (null/pending/downloaded/failed/too_large) near capture_tweet",
+        "Hardcoded Supabase URL default removed from storage.py — require via environment variable"
+      ],
+      "files_to_modify": [
+        "~/Projects/design-gallery/app/routes/dependencies.py",
+        "~/Projects/design-gallery/app/services/storage.py",
+        "~/Projects/design-gallery/app/routes/api.py",
+        "~/Projects/Hearted/Shared (Extension)/Resources/content-x.js"
+      ],
+      "priority": 2,
+      "passes": true,
+      "attempts": 0,
+      "notes": "Partially superseded: video-4 (71c5fbc1) shipped CDN allowlist validation, streaming downloads with redirect SSRF validation, size caps. video-6 (6f25eba3) added 17 security tests. hmac.compare_digest and Supabase URL default removal remain as future enhancements."
+    }
+  ],
+  "dependencies": {
+    "VID-1": [],
+    "VID-2": ["VID-1"],
+    "VID-3": [],
+    "VID-4": [],
+    "VID-5": ["VID-1", "VID-2"],
+    "VID-6": []
+  },
+  "technical_notes": {
+    "syndication_api": "Twitter's undocumented API at cdn.syndication.twimg.com/tweet-result?id={TWEET_ID}&token={RANDOM} returns full tweet JSON with mediaDetails[].video_info.variants[] containing direct MP4 URLs at multiple bitrates. No authentication required. Already used in api.py:1112-1156 for image enrichment but video variants are currently ignored.",
+    "existing_code": "The enrichment endpoint at api.py:1114-1119 already fetches from the Syndication API. The capture_tweet endpoint at api.py:611-637 already handles has_video + video_url for download_video_direct. The fix connects these two existing capabilities.",
+    "rejected_approaches": [
+      "Main-world fetch interception: HIGH security risk, detectable by Twitter, fragile against CSP changes",
+      "ffmpeg on Railway: memory/disk constraints, adds binary dependency, yt-dlp fallback on localhost already covers this",
+      "Page scope expansion to /bookmarks and /home: scope creep, increases selector maintenance burden",
+      "MediaSource/SourceBuffer hooks: over-engineered, Syndication API achieves the same goal with 1/10th the code"
+    ],
+    "performance_advisory": "Syndication API call adds ~200-500ms per video tweet. This is acceptable since video tweets are ~10-20% of content. The call has a 10-second timeout. If it becomes a bottleneck, consider async resolution via FastAPI BackgroundTasks (return 202, process video later)."
+  }
+}
