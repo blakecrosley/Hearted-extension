@@ -1,6 +1,7 @@
 """
 Dependency injection for FastAPI routes.
 """
+import hmac
 import os
 from typing import Annotated
 
@@ -21,6 +22,7 @@ async def require_api_key(x_api_key: Annotated[str, Header()]) -> bool:
     """
     Validate API key from X-API-Key header.
     Raises 401 if invalid or missing.
+    Uses constant-time comparison to prevent timing attacks.
     """
     if not API_KEY:
         raise HTTPException(
@@ -28,7 +30,7 @@ async def require_api_key(x_api_key: Annotated[str, Header()]) -> bool:
             detail="Server configuration error",
         )
 
-    if x_api_key != API_KEY:
+    if not hmac.compare_digest(x_api_key.encode(), API_KEY.encode()):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",

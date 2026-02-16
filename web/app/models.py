@@ -4,7 +4,7 @@ SQLAlchemy models for Hearted content management.
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import ForeignKey, String, Text, Boolean, DateTime, func, Table, Column, Integer
+from sqlalchemy import ForeignKey, String, Text, Boolean, DateTime, UniqueConstraint, func, Table, Column, Integer
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -23,6 +23,9 @@ item_tags = Table(
 
 class Item(Base):
     __tablename__ = "items"
+    __table_args__ = (
+        UniqueConstraint("source", "source_id", name="uq_items_source_source_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     url: Mapped[str] = mapped_column(String(2048), index=True)

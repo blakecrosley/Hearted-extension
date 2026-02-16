@@ -5,14 +5,14 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import select, or_, func, and_
+from sqlalchemy import select, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Item, Tag
-from app.schemas import EngineeringExportParams
+from app.schemas import ExportParams
 
 
-# Default engineering-related tags
+# Tag sets by category
 DEFAULT_ENGINEERING_TAGS = [
     "programming",
     "architecture",
@@ -36,70 +36,155 @@ DEFAULT_ENGINEERING_TAGS = [
     "performance",
 ]
 
+DEFAULT_DESIGN_TAGS = [
+    "design",
+    "ui",
+    "ux",
+    "typography",
+    "branding",
+    "visual",
+    "illustration",
+    "animation",
+    "motion",
+    "color",
+    "layout",
+    "figma",
+    "css",
+    "frontend",
+    "interaction",
+    "graphic-design",
+    "design-systems",
+    "art-direction",
+]
 
-async def get_engineering_items(
-    db: AsyncSession,
-    params: EngineeringExportParams,
-) -> list[Item]:
+DEFAULT_INSPIRATION_TAGS = [
+    "inspiration",
+    "creative",
+    "art",
+    "photography",
+    "generative",
+    "3d",
+    "shader",
+    "webgl",
+    "threejs",
+    "p5js",
+    "creative-coding",
+    "procedural",
+    "visualization",
+    "data-viz",
+    "experimental",
+]
+
+CATEGORY_TAG_MAP = {
+    "engineering": DEFAULT_ENGINEERING_TAGS,
+    "design": DEFAULT_DESIGN_TAGS,
+    "inspiration": DEFAULT_INSPIRATION_TAGS,
+}
+
+CATEGORY_TITLES = {
+    "engineering": "Engineering Content Export",
+    "design": "Design Content Export",
+    "inspiration": "Inspiration Content Export",
+    "all": "All Content Export",
+}
+
+
+def _get_tags_for_category(category: str) -> list[str]:
+    """Get the default tag list for a category."""
+    return CATEGORY_TAG_MAP.get(category, DEFAULT_ENGINEERING_TAGS)
+
+
+def _build_base_query(params: ExportParams) -> tuple:
+    """Build the base query and count query with shared filters.
+
+    Returns (items_query, count_query) tuple.
     """
-    Query engineering-related items with filtering.
-
-    Args:
-        db: Database session
-        params: Query parameters (limit, days_back, search, tags)
-
-    Returns:
-        List of Item objects matching criteria
-    """
-    # Start with base query
     query = select(Item).distinct()
+    count_query = select(func.count(Item.id.distinct()))
 
     # Tag filtering
-    tag_names = (
-        params.tags.split(",") if params.tags
-        else DEFAULT_ENGINEERING_TAGS
-    )
+    if params.include_untagged:
+        # LEFT JOIN to include untagged items
+        query = query.outerjoin(Item.tags)
+        count_query = count_query.outerjoin(Item.tags)
+    elif params.tags:
+        tag_names = [t.strip() for t in params.tags.split(",")]
+        query = query.join(Item.tags).where(Tag.name.in_(tag_names))
+        count_query = count_query.join(Item.tags).where(Tag.name.in_(tag_names))
+    elif params.category != "all":
+        category_tags = _get_tags_for_category(params.category)
+        query = query.join(Item.tags).where(Tag.name.in_(category_tags))
+        count_query = count_query.join(Item.tags).where(Tag.name.in_(category_tags))
+    # category=all with no tags filter: no join needed, return all items
 
-    # Join with tags and filter
-    query = query.join(Item.tags).where(Tag.name.in_(tag_names))
-
-    # Date filtering
-    if params.days_back:
+    # Date filtering - since takes precedence over days_back
+    if params.since:
+        query = query.where(Item.captured_at >= params.since)
+        count_query = count_query.where(Item.captured_at >= params.since)
+    elif params.days_back:
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=params.days_back)
         query = query.where(Item.captured_at >= cutoff_date)
+        count_query = count_query.where(Item.captured_at >= cutoff_date)
+
+    # since_id filtering (cursor-based pagination)
+    if params.since_id:
+        query = query.where(Item.id > params.since_id)
+        count_query = count_query.where(Item.id > params.since_id)
 
     # Text search
     if params.search:
         search_term = f"%{params.search}%"
-        query = query.where(
-            or_(
-                Item.title.ilike(search_term),
-                Item.description.ilike(search_term),
-            )
+        search_filter = or_(
+            Item.title.ilike(search_term),
+            Item.description.ilike(search_term),
         )
+        query = query.where(search_filter)
+        count_query = count_query.where(search_filter)
 
-    # Order by most recent first
+    return query, count_query
+
+
+async def get_export_items(
+    db: AsyncSession,
+    params: ExportParams,
+) -> tuple[list[Item], int]:
+    """
+    Query items with filtering and return items + total count.
+
+    Returns:
+        Tuple of (items list, total matching count)
+    """
+    query, count_query = _build_base_query(params)
+
+    # Get total count before pagination
+    count_result = await db.execute(count_query)
+    total_count = count_result.scalar() or 0
+
+    # Apply ordering, offset, and limit
     query = query.order_by(Item.captured_at.desc())
-
-    # Limit results
+    query = query.offset(params.offset)
     query = query.limit(params.limit)
 
-    # Execute query
+    # Execute items query
     result = await db.execute(query)
     items = list(result.scalars().all())
 
+    return items, total_count
+
+
+# Backward compat alias
+async def get_engineering_items(
+    db: AsyncSession,
+    params: ExportParams,
+) -> list[Item]:
+    """Legacy wrapper - returns items only (no total count)."""
+    items, _ = await get_export_items(db, params)
     return items
 
 
 def format_item_as_markdown(item: Item) -> str:
     """
     Format a single item as markdown for Claude Code context.
-
-    Args:
-        item: Item to format
-
-    Returns:
-        Markdown string for the item
     """
     # Parse raw_data for author info if available
     author_handle = "unknown"
@@ -138,25 +223,32 @@ def format_item_as_markdown(item: Item) -> str:
     return "\n".join(lines)
 
 
-def format_export_markdown(items: list[Item], params: EngineeringExportParams) -> str:
+def format_export_markdown(
+    items: list[Item],
+    params: ExportParams,
+    total_count: int = 0,
+) -> str:
     """
     Format multiple items as markdown export.
-
-    Args:
-        items: List of items to export
-        params: Query parameters used
-
-    Returns:
-        Complete markdown document
     """
     lines = []
 
-    # Header
-    lines.append("# Engineering Content Export")
+    # Category-aware header
+    title = CATEGORY_TITLES.get(params.category, "Content Export")
+    lines.append(f"# {title}")
     lines.append("")
     lines.append(f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
-    lines.append(f"Items: {len(items)}")
+    lines.append(f"Items: {len(items)} of {total_count} total")
     lines.append("")
+
+    # Pagination info
+    if params.offset > 0 or total_count > len(items):
+        lines.append(f"**Page:** offset={params.offset}, limit={params.limit}")
+        has_more = (params.offset + len(items)) < total_count
+        if has_more:
+            next_offset = params.offset + params.limit
+            lines.append(f"**Next page:** offset={next_offset}")
+        lines.append("")
 
     # Filters applied
     filters = []
@@ -164,8 +256,14 @@ def format_export_markdown(items: list[Item], params: EngineeringExportParams) -
         filters.append(f"Tags: {params.tags}")
     if params.days_back:
         filters.append(f"Last {params.days_back} days")
+    if params.since:
+        filters.append(f"Since: {params.since.isoformat()}")
+    if params.since_id:
+        filters.append(f"Since ID: {params.since_id}")
     if params.search:
         filters.append(f"Search: '{params.search}'")
+    if params.include_untagged:
+        filters.append("Including untagged items")
 
     if filters:
         lines.append("**Filters:** " + " | ".join(filters))
