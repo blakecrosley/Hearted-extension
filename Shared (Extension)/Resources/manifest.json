@@ -34,6 +34,11 @@
       "matches": ["*://midjourney.com/*", "*://www.midjourney.com/*"],
       "js": ["content-midjourney.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://midjourney.com/*", "*://www.midjourney.com/*"],
+      "js": ["content-queue.js"],
+      "run_at": "document_idle"
     }
   ],
   "background": {

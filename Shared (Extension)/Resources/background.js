@@ -1,7 +1,12 @@
 // Hearted - Background Service Worker
 // Handles communication between content scripts and the local API
 
-const API_BASE = 'https://h3arted.com/api';
+const BACKENDS = {
+  'hearted': 'https://h3arted.com/api',
+  'midjourney-studio': 'http://localhost:8200/api',
+  'midjourney-studio-prod': 'https://sk1ff.com'
+};
+const API_BASE = BACKENDS['hearted'];
 
 // Get stored API key from browser storage
 async function getApiKey() {
@@ -77,6 +82,13 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === 'captureSref') {
+    captureSref(message.data)
+      .then(result => sendResponse({ success: true, data: result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
   if (message.action === 'updateInstagramImage') {
     updateInstagramImage(message.data)
       .then(result => sendResponse({ success: true, data: result }))
@@ -87,6 +99,21 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'checkDuplicate') {
     checkDuplicate(message.url)
       .then(result => sendResponse({ success: true, exists: result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
+  // Queue operations (sk1ff.com)
+  if (message.action === 'getQueueItems') {
+    getQueueItems(message.status || 'pending')
+      .then(result => sendResponse({ success: true, data: result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
+  if (message.action === 'markQueueItemDone') {
+    markQueueItemDone(message.itemId)
+      .then(result => sendResponse({ success: true, data: result }))
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
@@ -190,6 +217,131 @@ async function checkDuplicate(url) {
 
   const data = await response.json();
   return data.exists;
+}
+
+// Convert blob to base64 string (service worker compatible, no FileReader)
+async function blobToBase64(blob) {
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 8192;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+// Capture a style reference → midjourney-studio
+async function captureSref(data) {
+  const payload = { code: data.code };
+
+  // Fetch all preview images (extension has <all_urls> permission)
+  const imageUrls = data.image_urls || (data.image_url ? [data.image_url] : []);
+  if (imageUrls.length > 0) {
+    const images = [];
+    for (const url of imageUrls) {
+      try {
+        const imgResponse = await fetch(url);
+        if (imgResponse.ok) {
+          const blob = await imgResponse.blob();
+          if (blob.size <= 5 * 1024 * 1024) {
+            images.push({
+              data: await blobToBase64(blob),
+              content_type: blob.type || 'image/webp'
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Hearted BG: Failed to fetch sref preview image:', e.message);
+      }
+    }
+    if (images.length > 0) {
+      payload.images = images;
+    }
+  }
+
+  // Forward name/notes/tags if provided
+  if (data.name) payload.name = data.name;
+  if (data.notes) payload.notes = data.notes;
+  if (data.tags) payload.tags = data.tags;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const response = await fetch(`${BACKENDS['midjourney-studio']}/srefs/capture`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || err.error || `API error: ${response.status}`);
+    }
+
+    return response.json();
+  } catch (e) {
+    clearTimeout(timeout);
+    if (e.name === 'AbortError') {
+      throw new Error('midjourney-studio (localhost:8200) is unreachable. Is the server running?');
+    }
+    throw e;
+  }
+}
+
+// Fetch pending queue items from sk1ff.com
+async function getQueueItems(status) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const response = await fetch(
+      `${BACKENDS['midjourney-studio-prod']}/queue/api/items?status=${encodeURIComponent(status)}`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    return response.json();
+  } catch (e) {
+    clearTimeout(timeout);
+    if (e.name === 'AbortError') throw new Error('sk1ff.com unreachable');
+    throw e;
+  }
+}
+
+// Mark a queue item done/pending on sk1ff.com
+async function markQueueItemDone(itemId) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const response = await fetch(
+      `${BACKENDS['midjourney-studio-prod']}/queue/api/${itemId}/done`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal
+      }
+    );
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `API error: ${response.status}`);
+    }
+    return response.json();
+  } catch (e) {
+    clearTimeout(timeout);
+    if (e.name === 'AbortError') throw new Error('sk1ff.com unreachable');
+    throw e;
+  }
 }
 
 // Keyboard shortcut handler (Cmd+Shift+H)
