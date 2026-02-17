@@ -250,7 +250,124 @@ async function loadStats() {
   }
 }
 
-// Event listeners
+// --- Tab navigation ---
+
+const tabButtons = document.querySelectorAll('.tab-btn');
+const tabPanels = document.querySelectorAll('.tab-content');
+let queueLoaded = false;
+
+function switchTab(tabName) {
+  tabButtons.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabName);
+  });
+  tabPanels.forEach(panel => {
+    panel.classList.toggle('active', panel.id === `panel-${tabName}`);
+  });
+
+  if (tabName === 'queue' && !queueLoaded) {
+    loadQueue();
+  }
+}
+
+tabButtons.forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+
+// --- Queue ---
+
+const QUEUE_BASE = 'https://sk1ff.com';
+const QUEUE_API = QUEUE_BASE + '/queue/api/items';
+const queueList = document.getElementById('queue-list');
+const queueLoading = document.getElementById('queue-loading');
+
+async function loadQueue() {
+  queueLoading.style.display = 'block';
+  while (queueList.firstChild) queueList.removeChild(queueList.firstChild);
+
+  try {
+    const response = await fetch(`${QUEUE_API}?status=pending`);
+    if (!response.ok) throw new Error(`${response.status}`);
+
+    const items = await response.json();
+    queueLoaded = true;
+    queueLoading.style.display = 'none';
+
+    // Update tab badge
+    const tabBtn = document.getElementById('tab-queue');
+    tabBtn.textContent = '';
+    tabBtn.appendChild(document.createTextNode('Queue '));
+    if (items.length > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'queue-count';
+      badge.textContent = items.length;
+      tabBtn.appendChild(badge);
+    }
+
+    if (items.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'queue-empty';
+      empty.textContent = 'No pending prompts. Craft some at sk1ff.com/queue/craft';
+      queueList.appendChild(empty);
+      return;
+    }
+
+    items.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'queue-item';
+
+      if (item.hero_image) {
+        const img = document.createElement('img');
+        img.className = 'queue-item-thumb';
+        img.src = item.hero_image.startsWith('http') ? item.hero_image : QUEUE_BASE + item.hero_image;
+        img.alt = '';
+        el.appendChild(img);
+      }
+
+      const body = document.createElement('div');
+      body.className = 'queue-item-body';
+
+      const prompt = document.createElement('div');
+      prompt.className = 'queue-item-prompt';
+      prompt.textContent = item.copy_text;
+      body.appendChild(prompt);
+
+      const srefLabel = item.sref_name || item.sref_code || '';
+      const metaText = [srefLabel, `--r ${item.repeat_count}`].filter(Boolean).join(' \u00B7 ');
+      const meta = document.createElement('div');
+      meta.className = 'queue-item-meta';
+      meta.textContent = metaText;
+      body.appendChild(meta);
+
+      el.appendChild(body);
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'queue-copy-btn';
+      copyBtn.textContent = 'Copy';
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(item.copy_text).then(() => {
+          copyBtn.textContent = '\u2713';
+          copyBtn.classList.add('copied');
+          setTimeout(() => {
+            copyBtn.textContent = 'Copy';
+            copyBtn.classList.remove('copied');
+          }, 1500);
+        });
+      });
+      el.appendChild(copyBtn);
+
+      queueList.appendChild(el);
+    });
+  } catch (e) {
+    queueLoading.style.display = 'none';
+    const errDiv = document.createElement('div');
+    errDiv.className = 'queue-error';
+    errDiv.textContent = 'Could not load queue: ' + e.message;
+    queueList.appendChild(errDiv);
+  }
+}
+
+// --- Event listeners ---
+
 saveBtn.addEventListener('click', savePage);
 settingsToggle.addEventListener('click', toggleSettings);
 saveApiKeyBtn.addEventListener('click', saveApiKey);
