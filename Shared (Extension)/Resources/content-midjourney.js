@@ -5,8 +5,12 @@
   'use strict';
 
   const CAPTURED_JOBS = new Set();
+  const CAPTURED_SREFS = new Set();
   let isCapturing = false;
   let captureCount = 0;
+  let srefObserver = null;
+  let srefAutoCapturing = false;
+  let srefCaptureCount = 0;
 
   // Check if we're on a page with Midjourney content
   function isMidjourneyPage() {
@@ -235,55 +239,145 @@
       let prompt = await waitForPrompt(5000);
       console.log('Hearted: Got prompt:', prompt ? prompt.substring(0, 50) + '...' : '(empty)');
 
-      // Get parameters from buttons and text
+      // Extract parameters from pill/badge elements in the detail sidebar.
+      // MJ V7 renders params as small pill elements like "chaos 10", "raw",
+      // "ow 275", "stylize 1000", "profile zojb2s8" near the prompt text.
       const parameters = {};
-      document.querySelectorAll('button, span, div').forEach(el => {
-        const text = el.textContent || '';
+      const paramPills = [];
 
-        // Aspect ratio
-        if (text.includes('ar') && text.match(/\d+:\d+/)) {
-          const match = text.match(/(\d+:\d+)/);
-          if (match) parameters.aspect_ratio = match[1];
+      // Find parameter pills — they're typically small chip/badge elements
+      // near the prompt, containing known parameter names
+      document.querySelectorAll('button, span, div, p').forEach(el => {
+        const text = (el.textContent || '').trim();
+        if (!text || text.length > 40 || text.length < 2) return;
+
+        // Skip if element has many children (container, not a pill)
+        if (el.children.length > 3) return;
+
+        const lower = text.toLowerCase();
+
+        // Profile code: "profile xxxxx"
+        const profileMatch = lower.match(/^profile\s+([a-z0-9]+)$/);
+        if (profileMatch) {
+          parameters.profile = profileMatch[1];
+          paramPills.push('--profile ' + profileMatch[1]);
+          return;
         }
-        // Style
-        if (text.includes('--style')) {
-          const match = text.match(/--style\s*(\w+)/);
-          if (match) parameters.style = match[1];
+        // Chaos: "chaos 10"
+        const chaosMatch = lower.match(/^chaos\s+(\d+)$/);
+        if (chaosMatch) {
+          parameters.chaos = chaosMatch[1];
+          paramPills.push('--chaos ' + chaosMatch[1]);
+          return;
         }
-        // Stylize
-        if ((text.includes('--stylize') || text.toLowerCase().includes('stylize')) && text.match(/\d+/)) {
-          const match = text.match(/(\d+)/);
-          if (match) parameters.stylize = match[1];
+        // Stylize: "stylize 1000"
+        const stylizeMatch = lower.match(/^stylize\s+(\d+)$/);
+        if (stylizeMatch) {
+          parameters.stylize = stylizeMatch[1];
+          paramPills.push('--stylize ' + stylizeMatch[1]);
+          return;
         }
-        // Profile
-        if (text.includes('--profile')) {
-          const match = text.match(/--profile\s*(\w+)/);
-          if (match) parameters.profile = match[1];
-        }
-        // Chaos
-        if ((text.includes('--chaos') || text.toLowerCase().includes('chaos')) && text.match(/\d+/)) {
-          const match = text.match(/(\d+)/);
-          if (match) parameters.chaos = match[1];
-        }
-        // Raw mode
-        if (text.toLowerCase() === 'raw' || text.includes('--raw')) {
+        // Raw: "raw"
+        if (lower === 'raw') {
           parameters.raw = true;
+          paramPills.push('--style raw');
+          return;
         }
-        // Motion (video-specific)
-        if (text.toLowerCase().includes('motion')) {
-          const match = text.match(/motion\s*(\w+)/i);
-          if (match) parameters.motion = match[1].toLowerCase();
+        // Omni weight: "ow 275"
+        const owMatch = lower.match(/^ow\s+(\d+)$/);
+        if (owMatch) {
+          parameters.ow = owMatch[1];
+          paramPills.push('--ow ' + owMatch[1]);
+          return;
         }
-        // Duration (video-specific) - like "5.2s"
+        // Aspect ratio: "ar 16:9" or just "16:9"
+        const arMatch = lower.match(/^(?:ar\s+)?(\d+:\d+)$/);
+        if (arMatch) {
+          parameters.aspect_ratio = arMatch[1];
+          paramPills.push('--ar ' + arMatch[1]);
+          return;
+        }
+        // Seed: "seed 12345"
+        const seedMatch = lower.match(/^seed\s+(\d+)$/);
+        if (seedMatch) {
+          parameters.seed = seedMatch[1];
+          paramPills.push('--seed ' + seedMatch[1]);
+          return;
+        }
+        // Sref: "sref 12345"
+        const srefMatch = lower.match(/^sref\s+(\d+)$/);
+        if (srefMatch) {
+          parameters.sref = srefMatch[1];
+          paramPills.push('--sref ' + srefMatch[1]);
+          return;
+        }
+        // Version: "v 7" or "version 7"
+        const vMatch = lower.match(/^(?:v|version)\s+([\d.]+)$/);
+        if (vMatch) {
+          parameters.version = vMatch[1];
+          paramPills.push('--v ' + vMatch[1]);
+          return;
+        }
+        // Quality: "quality 1" or "q 1"
+        const qMatch = lower.match(/^(?:quality|q)\s+([\d.]+)$/);
+        if (qMatch) {
+          parameters.quality = qMatch[1];
+          paramPills.push('--quality ' + qMatch[1]);
+          return;
+        }
+        // Weird: "weird 100"
+        const weirdMatch = lower.match(/^weird\s+(\d+)$/);
+        if (weirdMatch) {
+          parameters.weird = weirdMatch[1];
+          paramPills.push('--weird ' + weirdMatch[1]);
+          return;
+        }
+        // No (negative prompt): starts with "no "
+        const noMatch = lower.match(/^no\s+(.+)$/);
+        if (noMatch) {
+          parameters.no = noMatch[1];
+          paramPills.push('--no ' + noMatch[1]);
+          return;
+        }
+        // Motion (video): "motion low/med/high"
+        const motionMatch = lower.match(/^motion\s+(\w+)$/);
+        if (motionMatch) {
+          parameters.motion = motionMatch[1];
+          return;
+        }
+        // Duration (video): "5.2s"
         if (text.match(/^\d+\.?\d*s$/)) {
           parameters.duration = text;
-        }
-        // Batch size
-        if (text.includes('bs') && text.match(/bs\s*\d+/)) {
-          const match = text.match(/bs\s*(\d+)/);
-          if (match) parameters.batch_size = match[1];
+          return;
         }
       });
+
+      // Extract omni reference (oref) thumbnail images.
+      // These appear as a row of small clickable images between the prompt
+      // text and the parameter pills.
+      const orefUrls = [];
+      document.querySelectorAll('img[src*="cdn.midjourney.com"]').forEach(img => {
+        const src = img.src;
+        // Skip the main image (large) — orefs are thumbnails (small, usually < 80px)
+        const rect = img.getBoundingClientRect();
+        if (rect.width > 0 && rect.width < 100 && rect.height > 0 && rect.height < 100) {
+          // It's a thumbnail — likely an oref
+          if (!orefUrls.includes(src)) {
+            orefUrls.push(src);
+          }
+        }
+      });
+      if (orefUrls.length > 0) {
+        parameters.oref_urls = orefUrls;
+        console.log('Hearted: Found', orefUrls.length, 'oref images');
+      }
+
+      // Reconstruct full prompt with parameters appended
+      // so the server's parse_prompt() can extract everything
+      if (prompt && paramPills.length > 0) {
+        prompt = prompt + ' ' + paramPills.join(' ');
+        console.log('Hearted: Reconstructed prompt with params:', prompt.substring(0, 100) + '...');
+      }
 
       // Get username
       let username = '';
@@ -601,16 +695,770 @@
     });
   }
 
+  // ===== Style Reference Capture (Style Explorer) =====
+
+  // Check if we're on the Likes tab
+  function isLikesTab() {
+    const params = new URLSearchParams(window.location.search);
+    return window.location.pathname.includes('/explore') && params.get('tab') === 'likes';
+  }
+
+  function isStyleExplorer() {
+    // Never match on the likes tab — liked images may contain style links
+    if (isLikesTab()) return false;
+
+    const path = window.location.pathname;
+    const params = new URLSearchParams(window.location.search);
+
+    // URL-based: /explore with style-related tab/feature params
+    if (path.includes('/explore') && (
+      params.get('tab') === 'styles' ||
+      params.get('tab') === 'style_references' ||
+      params.get('feature') === 'style-reference' ||
+      params.get('feature') === 'styles'
+    )) return true;
+
+    // DOM-based: presence of style card links (/styles/0_XXXX)
+    if (document.querySelector('a[href*="/styles/"]')) return true;
+
+    return false;
+  }
+
+  function extractSrefCode(card) {
+    // Primary: extract from /styles/0_CODE link href
+    const styleLink = card.querySelector('a[href*="/styles/"]');
+    if (styleLink) {
+      const match = styleLink.getAttribute('href').match(/\/styles\/\d+_(\d+)/);
+      if (match) return match[1];
+    }
+
+    // Fallback: button text with sref pattern (em-dash or double-dash)
+    const buttons = card.querySelectorAll('button');
+    for (const btn of buttons) {
+      const text = btn.textContent?.trim();
+      const srefMatch = text?.match(/[\u2014\-]{1,2}sref\s+(\d+)/);
+      if (srefMatch) return srefMatch[1];
+    }
+
+    // Fallback: image URL pattern /styles/0_CODE/
+    const img = card.querySelector('img[src*="cdn.midjourney.com/styles/"]');
+    if (img) {
+      const match = img.src.match(/\/styles\/\d+_(\d+)\//);
+      if (match) return match[1];
+    }
+
+    return null;
+  }
+
+  function extractPreviewImages(card) {
+    // Style cards have 3 images: portrait, landscape, still_life
+    const imgs = card.querySelectorAll('img[src*="cdn.midjourney.com/styles/"]');
+    if (imgs.length > 0) {
+      return Array.from(imgs).map(img => img.src).filter(Boolean);
+    }
+    // Fallback to any CDN image
+    const fallback = card.querySelector('img[src*="cdn.midjourney.com"]') ||
+                     card.querySelector('img[src]');
+    return fallback?.src ? [fallback.src] : [];
+  }
+
+  async function handleSrefCapture(card, code, imageUrls) {
+    const btn = card.querySelector('.hearted-sref-btn');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '\u23F3'; // hourglass
+    }
+
+    try {
+      const result = await new Promise((resolve, reject) => {
+        browser.runtime.sendMessage({
+          action: 'captureSref',
+          data: { code, image_urls: imageUrls }
+        }, response => {
+          if (browser.runtime.lastError) {
+            reject(new Error(browser.runtime.lastError.message || 'Extension error'));
+            return;
+          }
+          if (response?.success) {
+            resolve(response.data);
+          } else {
+            reject(new Error(response?.error || 'Capture failed'));
+          }
+        });
+      });
+
+      CAPTURED_SREFS.add(code);
+
+      if (btn) {
+        btn.textContent = '\u2713'; // checkmark
+        btn.classList.add('hearted-sref-captured');
+      }
+      card.classList.add('hearted-sref-done');
+
+      showToast(result.is_new
+        ? `Captured --sref ${code}`
+        : `--sref ${code} already in library`
+      );
+
+    } catch (e) {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '\uD83D\uDCBE'; // floppy disk
+      }
+
+      const isUnreachable = e.message.includes('unreachable') ||
+                            e.message.includes('Failed to fetch') ||
+                            e.message.includes('NetworkError');
+
+      showToast(
+        isUnreachable
+          ? 'Server unreachable (localhost:8200)'
+          : e.message,
+        true
+      );
+    }
+  }
+
+  function addSrefButton(card) {
+    if (card.querySelector('.hearted-sref-btn')) return;
+
+    const code = extractSrefCode(card);
+    if (!code) return;
+
+    const btn = document.createElement('button');
+    btn.className = 'hearted-sref-btn';
+    btn.textContent = CAPTURED_SREFS.has(code) ? '\u2713' : '\uD83D\uDCBE';
+    btn.title = `Capture --sref ${code}`;
+    if (CAPTURED_SREFS.has(code)) btn.classList.add('hearted-sref-captured');
+
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!btn.disabled && !CAPTURED_SREFS.has(code)) {
+        // Extract images at click time (not creation time) for lazy-loaded images
+        const currentImageUrls = extractPreviewImages(card);
+        handleSrefCapture(card, code, currentImageUrls);
+      }
+    });
+
+    const pos = window.getComputedStyle(card).position;
+    if (pos === 'static') card.style.position = 'relative';
+
+    card.appendChild(btn);
+  }
+
+  function scanStyleCards() {
+    // Find style cards by their distinctive link pattern: a[href*="/styles/"]
+    const styleLinks = document.querySelectorAll('a[href*="/styles/"]');
+    if (styleLinks.length === 0) {
+      console.log('Hearted Sref: No style cards found.');
+      return;
+    }
+
+    console.log(`Hearted Sref: Found ${styleLinks.length} style links`);
+
+    styleLinks.forEach(link => {
+      // Card container is the parent div (has group/jobCard class, overflow-hidden)
+      const card = link.parentElement;
+      if (card && !card._heartedProcessed) {
+        card._heartedProcessed = true;
+        addSrefButton(card);
+      }
+    });
+  }
+
+  function cleanupStyleExplorer() {
+    srefAutoCapturing = false;
+    if (srefObserver) {
+      srefObserver.disconnect();
+      srefObserver = null;
+    }
+    const ui = document.getElementById('hearted-sref-ui');
+    if (ui) ui.remove();
+    document.querySelectorAll('.hearted-sref-btn').forEach(btn => btn.remove());
+    document.querySelectorAll('.hearted-sref-done').forEach(el => {
+      el.classList.remove('hearted-sref-done');
+      el._heartedProcessed = false;
+    });
+  }
+
+  async function autoCaptureSrefs() {
+    if (!srefAutoCapturing) return;
+
+    const styleLinks = document.querySelectorAll('a[href*="/styles/"]');
+    let captured = 0;
+    for (const link of styleLinks) {
+      if (!srefAutoCapturing) break;
+
+      const card = link.parentElement;
+      if (!card) continue;
+
+      const code = extractSrefCode(card);
+      if (!code || CAPTURED_SREFS.has(code)) continue;
+
+      const imageUrls = extractPreviewImages(card);
+      try {
+        const result = await new Promise((resolve, reject) => {
+          browser.runtime.sendMessage({
+            action: 'captureSref',
+            data: { code, image_urls: imageUrls }
+          }, response => {
+            if (browser.runtime.lastError) {
+              reject(new Error(browser.runtime.lastError.message));
+              return;
+            }
+            if (response?.success) resolve(response.data);
+            else reject(new Error(response?.error || 'Capture failed'));
+          });
+        });
+        CAPTURED_SREFS.add(code);
+        card.classList.add('hearted-sref-done');
+        const btn = card.querySelector('.hearted-sref-btn');
+        if (btn) {
+          btn.textContent = '\u2713';
+          btn.classList.add('hearted-sref-captured');
+        }
+        captured++;
+        srefCaptureCount++;
+        updateSrefCaptureUI();
+      } catch (e) {
+        console.warn(`Hearted: Auto-capture failed for sref ${code}:`, e.message);
+        if (e.message.includes('unreachable') || e.message.includes('Failed to fetch')) {
+          srefAutoCapturing = false;
+          updateSrefCaptureUI();
+          showToast('Server unreachable (localhost:8200) — auto-capture stopped', true);
+          return;
+        }
+      }
+    }
+    if (captured > 0) {
+      console.log(`Hearted: Auto-captured ${captured} new srefs`);
+    }
+  }
+
+  function updateSrefCaptureUI() {
+    const label = document.getElementById('hearted-sref-label');
+    const count = document.getElementById('hearted-sref-count');
+    const btn = document.getElementById('hearted-sref-toggle');
+    if (label) label.textContent = srefAutoCapturing ? 'Capturing...' : 'Auto Capture';
+    if (count) count.textContent = srefCaptureCount;
+    if (btn) {
+      btn.classList.toggle('hearted-sref-toggle-active', srefAutoCapturing);
+    }
+  }
+
+  function createSrefCaptureUI() {
+    if (document.getElementById('hearted-sref-ui')) return;
+
+    const container = document.createElement('div');
+    container.id = 'hearted-sref-ui';
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.id = 'hearted-sref-toggle';
+    toggleBtn.className = 'hearted-sref-toggle-btn';
+
+    const icon = document.createElement('span');
+    icon.textContent = '\uD83C\uDFA8';
+    const label = document.createElement('span');
+    label.id = 'hearted-sref-label';
+    label.textContent = 'Auto Capture';
+    const badge = document.createElement('span');
+    badge.id = 'hearted-sref-count';
+    badge.className = 'hearted-sref-count-badge';
+    badge.textContent = '0';
+
+    toggleBtn.appendChild(icon);
+    toggleBtn.appendChild(label);
+    toggleBtn.appendChild(badge);
+    container.appendChild(toggleBtn);
+    document.body.appendChild(container);
+
+    toggleBtn.addEventListener('click', () => {
+      srefAutoCapturing = !srefAutoCapturing;
+      updateSrefCaptureUI();
+      if (srefAutoCapturing) {
+        scanStyleCards();
+        autoCaptureSrefs();
+      }
+    });
+  }
+
+  function initStyleExplorer() {
+    if (!isStyleExplorer()) return;
+
+    console.log('Hearted: Style Explorer detected, initializing sref capture');
+
+    // Inject CSS
+    if (!document.getElementById('hearted-sref-styles')) {
+      const style = document.createElement('style');
+      style.id = 'hearted-sref-styles';
+      style.textContent = `
+        #hearted-sref-ui {
+          position: fixed;
+          bottom: 20px;
+          right: 20px;
+          z-index: 9999;
+          font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        .hearted-sref-toggle-btn {
+          background: linear-gradient(135deg, #7289da 0%, #5865f2 100%);
+          color: white;
+          border: none;
+          padding: 12px 20px;
+          border-radius: 24px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 600;
+          box-shadow: 0 4px 12px rgba(88, 101, 242, 0.4);
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          transition: transform 0.2s, box-shadow 0.2s, background 0.3s;
+        }
+        .hearted-sref-toggle-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px rgba(88, 101, 242, 0.5);
+        }
+        .hearted-sref-toggle-active {
+          background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%) !important;
+          box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4) !important;
+        }
+        .hearted-sref-toggle-active:hover {
+          box-shadow: 0 6px 16px rgba(34, 197, 94, 0.5) !important;
+        }
+        .hearted-sref-count-badge {
+          background: rgba(255,255,255,0.2);
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-size: 12px;
+        }
+        .hearted-sref-btn {
+          position: absolute;
+          top: 8px;
+          left: 8px;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          border: 2px solid rgba(255, 255, 255, 0.3);
+          background: rgba(0, 0, 0, 0.7);
+          color: white;
+          font-size: 16px;
+          cursor: pointer;
+          z-index: 100;
+          opacity: 0.5;
+          transition: opacity 0.2s, transform 0.2s, background 0.2s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          backdrop-filter: blur(4px);
+          -webkit-backdrop-filter: blur(4px);
+        }
+        *:hover > .hearted-sref-btn,
+        .hearted-sref-btn:focus {
+          opacity: 1;
+        }
+        .hearted-sref-btn:hover {
+          transform: scale(1.15);
+          background: rgba(88, 101, 242, 0.9);
+          border-color: rgba(88, 101, 242, 0.5);
+        }
+        .hearted-sref-btn:disabled {
+          cursor: wait;
+          opacity: 0.7 !important;
+        }
+        .hearted-sref-captured {
+          background: rgba(34, 197, 94, 0.85) !important;
+          border-color: rgba(34, 197, 94, 0.5) !important;
+          opacity: 1 !important;
+          cursor: default;
+        }
+        .hearted-sref-done {
+          position: relative;
+        }
+        .hearted-sref-done::after {
+          content: '\\2713';
+          position: absolute;
+          bottom: 6px;
+          left: 6px;
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          background: #22c55e;
+          color: white;
+          font-size: 13px;
+          font-weight: bold;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 100;
+          pointer-events: none;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    // Create toggle button UI
+    createSrefCaptureUI();
+
+    // Initial scan after brief delay for React render
+    setTimeout(scanStyleCards, 500);
+
+    // Watch for new cards (infinite scroll) — debounced scan + auto-capture if active
+    let srefScanTimeout;
+    srefObserver = new MutationObserver(() => {
+      clearTimeout(srefScanTimeout);
+      srefScanTimeout = setTimeout(() => {
+        scanStyleCards();
+        if (srefAutoCapturing) autoCaptureSrefs();
+      }, 300);
+    });
+    srefObserver.observe(document.body, { childList: true, subtree: true });
+
+    // Auto-capture on scroll when toggle is active
+    let scrollTimeout;
+    window.addEventListener('scroll', () => {
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        scanStyleCards();
+        if (srefAutoCapturing) autoCaptureSrefs();
+      }, 500);
+    });
+  }
+
+  // ===== Likes Tab Capture =====
+
+  const CAPTURED_LIKES = new Set();
+  let likesAutoCapturing = false;
+  let likesCaptureCount = 0;
+  let likesObserver = null;
+
+  function extractLikeImageData(element) {
+    try {
+      const jobId = extractJobId(element);
+      if (!jobId || CAPTURED_LIKES.has(jobId)) return null;
+
+      let imageUrl = '';
+      const bgImage = element.style.backgroundImage || window.getComputedStyle(element).backgroundImage;
+      if (bgImage && bgImage !== 'none') {
+        const match = bgImage.match(/url\(["']?([^"')]+)["']?\)/);
+        if (match) imageUrl = match[1];
+      }
+      if (!imageUrl) {
+        const img = element.querySelector('img[src*="cdn.midjourney.com"]') ||
+                    element.closest('a')?.querySelector('img[src*="cdn.midjourney.com"]');
+        if (img) imageUrl = img.src;
+      }
+      if (imageUrl) {
+        imageUrl = imageUrl
+          .replace(/_384_N\.webp/, '_1024_N.webp')
+          .replace(/_256_N\.webp/, '_1024_N.webp')
+          .replace(/\/0_\d+\.jpeg/, '/0_0.jpeg');
+      }
+
+      if (!imageUrl) return null;
+      return { job_id: jobId, image_url: imageUrl };
+    } catch (e) {
+      console.error('Hearted Likes: Error extracting image data', e);
+      return null;
+    }
+  }
+
+  async function captureLikeItem(data) {
+    return new Promise((resolve, reject) => {
+      try {
+        browser.runtime.sendMessage({
+          action: 'captureLike',
+          data: data
+        }, response => {
+          if (browser.runtime.lastError) {
+            reject(new Error(browser.runtime.lastError.message || 'Runtime error'));
+            return;
+          }
+          if (response?.success) {
+            resolve(response.data);
+          } else {
+            reject(new Error(response?.error || 'Capture failed'));
+          }
+        });
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  async function captureCurrentDetailAsLike() {
+    showToast('Extracting...', false);
+    const data = await extractDetailData();
+    if (!data) {
+      showToast('Could not extract data', true);
+      return false;
+    }
+
+    const jobId = data.source_id;
+    const hasPrompt = data.raw_data.prompt && data.raw_data.prompt.length > 0;
+
+    // Skip only if already captured WITH a prompt in this session
+    if (CAPTURED_LIKES.has(jobId + ':prompt')) {
+      return false;
+    }
+    // If captured without prompt before, allow re-capture to enrich
+    if (CAPTURED_LIKES.has(jobId) && !hasPrompt) {
+      return false;
+    }
+
+    CAPTURED_LIKES.add(jobId);
+    if (hasPrompt) CAPTURED_LIKES.add(jobId + ':prompt');
+
+    try {
+      const payload = {
+        image_url: data.image_url,
+        job_id: jobId,
+        prompt_text: data.raw_data.prompt || '',
+        source: 'explore'
+      };
+      if (data.raw_data.parameters?.oref_urls?.length > 0) {
+        payload.oref_urls = data.raw_data.parameters.oref_urls;
+      }
+      if (data.raw_data.username) {
+        payload.username = data.raw_data.username;
+      }
+      const result = await captureLikeItem(payload);
+
+      likesCaptureCount++;
+      updateLikesCaptureUI();
+
+      const parts = [];
+      if (result.profile_code) parts.push('--p ' + result.profile_code);
+      if (hasPrompt) parts.push('Prompt (' + data.raw_data.prompt.length + ' chars)');
+      showToast('Saved like' + (parts.length ? ': ' + parts.join(', ') : ''));
+      return true;
+    } catch (e) {
+      CAPTURED_LIKES.delete(jobId);
+      showToast('Failed: ' + e.message, true);
+      return false;
+    }
+  }
+
+  async function scanAndCaptureLikes() {
+    if (!likesAutoCapturing) return;
+
+    const imageLinks = document.querySelectorAll('a[href*="/jobs/"]');
+    console.log('Hearted Likes: Scanning ' + imageLinks.length + ' liked images');
+    let captured = 0;
+
+    for (const link of imageLinks) {
+      if (!likesAutoCapturing) break;
+
+      const imageEl = link.querySelector('[style*="background-image"]') ||
+                      link.querySelector('img[src*="cdn.midjourney.com"]') ||
+                      link;
+
+      const data = extractLikeImageData(imageEl);
+      if (!data) continue;
+
+      CAPTURED_LIKES.add(data.job_id);
+      try {
+        await captureLikeItem({
+          image_url: data.image_url,
+          job_id: data.job_id,
+          source: 'explore'
+        });
+        link.style.outline = '3px solid #22c55e';
+        link.style.outlineOffset = '-3px';
+        captured++;
+        likesCaptureCount++;
+        updateLikesCaptureUI();
+      } catch (e) {
+        console.warn('Hearted Likes: Failed to capture ' + data.job_id + ':', e.message);
+        if (e.message.includes('unreachable') || e.message.includes('Failed to fetch')) {
+          likesAutoCapturing = false;
+          updateLikesCaptureUI();
+          showToast('Server unreachable \u2014 auto-capture stopped', true);
+          return;
+        }
+      }
+    }
+
+    if (captured > 0) {
+      console.log('Hearted Likes: Captured ' + captured + ' new liked images');
+    }
+  }
+
+  function updateLikesCaptureUI() {
+    const label = document.getElementById('hearted-likes-label');
+    const count = document.getElementById('hearted-likes-count');
+    const btn = document.getElementById('hearted-likes-toggle');
+    if (label) label.textContent = likesAutoCapturing ? 'Capturing...' : 'Auto Capture';
+    if (count) count.textContent = likesCaptureCount;
+    if (btn) btn.classList.toggle('hearted-likes-toggle-active', likesAutoCapturing);
+  }
+
+  function createLikesCaptureUI() {
+    if (document.getElementById('hearted-likes-ui')) return;
+
+    const container = document.createElement('div');
+    container.id = 'hearted-likes-ui';
+
+    // Build UI with DOM methods (static extension UI, no user input)
+    const style = document.createElement('style');
+    style.textContent = [
+      '#hearted-likes-ui { position:fixed; bottom:20px; right:20px; z-index:9999;',
+      '  font-family:-apple-system,BlinkMacSystemFont,sans-serif;',
+      '  display:flex; flex-direction:column; gap:8px; align-items:flex-end; }',
+      '.hearted-likes-btn { background:linear-gradient(135deg,#ec4899 0%,#db2777 100%);',
+      '  color:white; border:none; padding:12px 20px; border-radius:24px;',
+      '  cursor:pointer; font-size:14px; font-weight:600;',
+      '  box-shadow:0 4px 12px rgba(219,39,119,0.4);',
+      '  display:flex; align-items:center; gap:8px;',
+      '  transition:transform 0.2s,box-shadow 0.2s,background 0.3s; }',
+      '.hearted-likes-btn:hover { transform:translateY(-2px);',
+      '  box-shadow:0 6px 16px rgba(219,39,119,0.5); }',
+      '.hearted-likes-toggle-active { background:linear-gradient(135deg,#22c55e 0%,#16a34a 100%)!important;',
+      '  box-shadow:0 4px 12px rgba(34,197,94,0.4)!important; }',
+      '.hearted-likes-toggle-active:hover { box-shadow:0 6px 16px rgba(34,197,94,0.5)!important; }',
+      '.hearted-likes-count-badge { background:rgba(255,255,255,0.2);',
+      '  padding:2px 8px; border-radius:12px; font-size:12px; }',
+      '#hearted-likes-capture-single { background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);',
+      '  box-shadow:0 4px 12px rgba(217,119,6,0.4); }',
+      '#hearted-likes-capture-single:hover { box-shadow:0 6px 16px rgba(217,119,6,0.5); }'
+    ].join('\n');
+    container.appendChild(style);
+
+    // Single capture button (detail view only)
+    const singleBtn = document.createElement('button');
+    singleBtn.id = 'hearted-likes-capture-single';
+    singleBtn.className = 'hearted-likes-btn';
+    singleBtn.style.display = 'none';
+    singleBtn.appendChild(document.createTextNode('\u2764\uFE0F Capture This'));
+    container.appendChild(singleBtn);
+
+    // Auto capture toggle
+    const toggleBtn = document.createElement('button');
+    toggleBtn.id = 'hearted-likes-toggle';
+    toggleBtn.className = 'hearted-likes-btn';
+
+    const icon = document.createTextNode('\u2764\uFE0F ');
+    toggleBtn.appendChild(icon);
+
+    const label = document.createElement('span');
+    label.id = 'hearted-likes-label';
+    label.textContent = 'Auto Capture';
+    toggleBtn.appendChild(label);
+
+    const badge = document.createElement('span');
+    badge.id = 'hearted-likes-count';
+    badge.className = 'hearted-likes-count-badge';
+    badge.textContent = '0';
+    toggleBtn.appendChild(badge);
+
+    container.appendChild(toggleBtn);
+    document.body.appendChild(container);
+
+    // Event handlers
+    singleBtn.addEventListener('click', () => captureCurrentDetailAsLike());
+    toggleBtn.addEventListener('click', () => {
+      likesAutoCapturing = !likesAutoCapturing;
+      updateLikesCaptureUI();
+      if (likesAutoCapturing) {
+        const isDetail = window.location.pathname.includes('/jobs/');
+        if (isDetail) {
+          // In detail view — capture current, then auto-capture on navigation
+          captureCurrentDetailAsLike();
+        } else {
+          // In grid — scan visible images
+          scanAndCaptureLikes();
+        }
+      }
+    });
+
+    // Show/hide single capture button for detail views
+    function updateSingleVisibility() {
+      const isDetail = window.location.pathname.includes('/jobs/');
+      singleBtn.style.display = isDetail ? 'flex' : 'none';
+    }
+    updateSingleVisibility();
+    new MutationObserver(updateSingleVisibility)
+      .observe(document.body, { subtree: true, childList: true });
+  }
+
+  function cleanupLikesCapture() {
+    likesAutoCapturing = false;
+    if (likesObserver) {
+      likesObserver.disconnect();
+      likesObserver = null;
+    }
+    const ui = document.getElementById('hearted-likes-ui');
+    if (ui) ui.remove();
+  }
+
+  // Track likes mode across SPA navigation (detail views lose tab=likes from URL)
+  function enterLikesMode() {
+    try { sessionStorage.setItem('hearted-likes-mode', 'true'); } catch (e) {}
+  }
+  function exitLikesMode() {
+    try { sessionStorage.removeItem('hearted-likes-mode'); } catch (e) {}
+  }
+  function isInLikesMode() {
+    if (isLikesTab()) return true;
+    // Detail view navigated from likes tab
+    if (window.location.pathname.includes('/jobs/')) {
+      try { return sessionStorage.getItem('hearted-likes-mode') === 'true'; } catch (e) {}
+    }
+    return false;
+  }
+
+  function initLikesCapture() {
+    if (!isLikesTab() && !isInLikesMode()) return;
+
+    // Set mode so detail views remember they came from likes
+    enterLikesMode();
+
+    console.log('Hearted: Likes mode active, initializing likes capture');
+    createLikesCaptureUI();
+
+    // Watch for new images (infinite scroll) + auto-capture on scroll
+    let scrollTimeout;
+    likesObserver = new MutationObserver(() => {
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        if (likesAutoCapturing) scanAndCaptureLikes();
+      }, 300);
+    });
+    likesObserver.observe(document.body, { childList: true, subtree: true });
+
+    window.addEventListener('scroll', () => {
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        if (likesAutoCapturing) scanAndCaptureLikes();
+      }, 500);
+    });
+  }
+
   // Initialize
   function init() {
     const existingUI = document.getElementById('hearted-capture-ui');
     if (existingUI) existingUI.remove();
+    cleanupStyleExplorer();
+    cleanupLikesCapture();
 
     if (isMidjourneyPage()) {
-      console.log('Hearted: Detected Midjourney page, initializing capture UI');
-      createCaptureUI();
-      setupScrollListener();
+      if (isLikesTab() || isInLikesMode()) {
+        console.log('Hearted: Likes mode, routing to likes capture');
+        initLikesCapture();
+      } else if (isStyleExplorer()) {
+        // Left likes context — clear mode
+        exitLikesMode();
+        console.log('Hearted: Style Explorer detected, routing to sref capture');
+        initStyleExplorer();
+      } else {
+        // Left likes context — clear mode
+        exitLikesMode();
+        console.log('Hearted: Detected Midjourney page, initializing capture UI');
+        createCaptureUI();
+        setupScrollListener();
+      }
     } else {
+      exitLikesMode();
       console.log('Hearted: Not a Midjourney page, path:', window.location.pathname);
     }
   }
@@ -623,8 +1471,13 @@
     }
 
     const hasContent = document.querySelector('a[href*="/jobs/"]') !== null ||
-                       window.location.pathname.includes('/jobs/');
-    const hasUI = document.getElementById('hearted-capture-ui') !== null;
+                       document.querySelector('a[href*="/styles/"]') !== null ||
+                       window.location.pathname.includes('/jobs/') ||
+                       isStyleExplorer() ||
+                       isLikesTab();
+    const hasUI = document.getElementById('hearted-capture-ui') !== null ||
+                   document.getElementById('hearted-sref-styles') !== null ||
+                   document.getElementById('hearted-likes-ui') !== null;
 
     if (hasContent && !hasUI) {
       init();
@@ -644,7 +1497,18 @@
   let lastUrl = location.href;
   new MutationObserver(() => {
     if (location.href !== lastUrl) {
+      const prevUrl = lastUrl;
       lastUrl = location.href;
+
+      // Auto-capture on detail view navigation in likes mode
+      if (likesAutoCapturing && isInLikesMode() && location.pathname.includes('/jobs/')) {
+        // New detail view — auto-capture after content loads
+        setTimeout(async () => {
+          console.log('Hearted Likes: Auto-capturing on navigation to', location.pathname);
+          await captureCurrentDetailAsLike();
+        }, 1500);
+      }
+
       setTimeout(() => initWithRetry(0), 500);
     }
   }).observe(document.body, { subtree: true, childList: true });
