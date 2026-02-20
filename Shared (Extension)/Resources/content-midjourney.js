@@ -243,11 +243,12 @@
       // MJ V7 renders params as small pill elements like "chaos 10", "raw",
       // "ow 275", "stylize 1000", "profile zojb2s8" near the prompt text.
       const parameters = {};
-      const paramPills = [];
       const srefCodes = []; // Collect multiple --sref values
 
       // Find parameter pills — they're typically small chip/badge elements
-      // near the prompt, containing known parameter names
+      // near the prompt, containing known parameter names.
+      // Track seen text to avoid duplicates from parent+child matching.
+      const seenPillText = new Set();
       document.querySelectorAll('button, span, div, p').forEach(el => {
         const text = (el.textContent || '').trim();
         if (!text || text.length > 40 || text.length < 2) return;
@@ -255,156 +256,166 @@
         // Skip if element has many children (container, not a pill)
         if (el.children.length > 3) return;
 
+        // Deduplicate: skip if we've already processed this exact text
+        if (seenPillText.has(text.toLowerCase())) return;
+
         const lower = text.toLowerCase();
 
         // Profile code: "profile xxxxx"
         const profileMatch = lower.match(/^profile\s+([a-z0-9]+)$/);
         if (profileMatch) {
           parameters.profile = profileMatch[1];
-          paramPills.push('--profile ' + profileMatch[1]);
+          seenPillText.add(lower);
           return;
         }
         // Chaos: "chaos 10"
         const chaosMatch = lower.match(/^chaos\s+(\d+)$/);
         if (chaosMatch) {
           parameters.chaos = chaosMatch[1];
-          paramPills.push('--chaos ' + chaosMatch[1]);
+          seenPillText.add(lower);
           return;
         }
         // Stylize: "stylize 1000"
         const stylizeMatch = lower.match(/^stylize\s+(\d+)$/);
         if (stylizeMatch) {
           parameters.stylize = stylizeMatch[1];
-          paramPills.push('--stylize ' + stylizeMatch[1]);
+          seenPillText.add(lower);
           return;
         }
         // Raw: "raw"
         if (lower === 'raw') {
           parameters.raw = true;
-          paramPills.push('--style raw');
+          seenPillText.add(lower);
           return;
         }
         // Omni weight: "ow 275"
         const owMatch = lower.match(/^ow\s+(\d+)$/);
         if (owMatch) {
           parameters.ow = owMatch[1];
-          paramPills.push('--ow ' + owMatch[1]);
+          seenPillText.add(lower);
           return;
         }
         // Aspect ratio: "ar 16:9" or just "16:9"
         const arMatch = lower.match(/^(?:ar\s+)?(\d+:\d+)$/);
         if (arMatch) {
           parameters.aspect_ratio = arMatch[1];
-          paramPills.push('--ar ' + arMatch[1]);
+          seenPillText.add(lower);
           return;
         }
         // Seed: "seed 12345"
         const seedMatch = lower.match(/^seed\s+(\d+)$/);
         if (seedMatch) {
           parameters.seed = seedMatch[1];
-          paramPills.push('--seed ' + seedMatch[1]);
+          seenPillText.add(lower);
           return;
         }
         // Sref: "sref 12345" — collect ALL sref codes (multi-value supported)
         const srefMatch = lower.match(/^sref\s+(\d+)$/);
         if (srefMatch) {
           srefCodes.push(srefMatch[1]);
+          seenPillText.add(lower);
           return;
         }
         // Version: "v 7" or "version 7"
         const vMatch = lower.match(/^(?:v|version)\s+([\d.]+)$/);
         if (vMatch) {
           parameters.version = vMatch[1];
-          paramPills.push('--v ' + vMatch[1]);
+          seenPillText.add(lower);
           return;
         }
         // Niji: "niji 7"
         const nijiMatch = lower.match(/^niji\s+(\d+)$/);
         if (nijiMatch) {
           parameters.version = 'niji ' + nijiMatch[1];
-          paramPills.push('--niji ' + nijiMatch[1]);
+          seenPillText.add(lower);
           return;
         }
         // Quality: "quality 1" or "q 1"
         const qMatch = lower.match(/^(?:quality|q)\s+([\d.]+)$/);
         if (qMatch) {
           parameters.quality = qMatch[1];
-          paramPills.push('--quality ' + qMatch[1]);
+          seenPillText.add(lower);
           return;
         }
         // Weird: "weird 100"
         const weirdMatch = lower.match(/^weird\s+(\d+)$/);
         if (weirdMatch) {
           parameters.weird = weirdMatch[1];
-          paramPills.push('--weird ' + weirdMatch[1]);
+          seenPillText.add(lower);
           return;
         }
         // Exp (experimental): "exp 25"
         const expMatch = lower.match(/^exp\s+(\d+)$/);
         if (expMatch) {
           parameters.exp = expMatch[1];
-          paramPills.push('--exp ' + expMatch[1]);
+          seenPillText.add(lower);
           return;
         }
         // Style weight: "sw 150"
         const swMatch = lower.match(/^sw\s+(\d+)$/);
         if (swMatch) {
           parameters.sw = swMatch[1];
-          paramPills.push('--sw ' + swMatch[1]);
+          seenPillText.add(lower);
           return;
         }
         // Image weight: "iw 1.5"
         const iwMatch = lower.match(/^iw\s+([\d.]+)$/);
         if (iwMatch) {
           parameters.iw = iwMatch[1];
-          paramPills.push('--iw ' + iwMatch[1]);
+          seenPillText.add(lower);
           return;
         }
         // Profile weight: "pw 50"
         const pwMatch = lower.match(/^pw\s+(\d+)$/);
         if (pwMatch) {
           parameters.pw = pwMatch[1];
-          paramPills.push('--pw ' + pwMatch[1]);
+          seenPillText.add(lower);
           return;
         }
         // Repeat: "repeat 4"
         const repeatMatch = lower.match(/^repeat\s+(\d+)$/);
         if (repeatMatch) {
           parameters.repeat = repeatMatch[1];
-          paramPills.push('--repeat ' + repeatMatch[1]);
+          seenPillText.add(lower);
           return;
         }
         // Draft mode
         if (lower === 'draft') {
           parameters.draft = true;
-          paramPills.push('--draft');
+          seenPillText.add(lower);
           return;
         }
-        // No (negative prompt): starts with "no "
+        // No (negative prompt): starts with "no " but NOT MJ UI text
         const noMatch = lower.match(/^no\s+(.+)$/);
         if (noMatch) {
-          parameters.no = noMatch[1];
-          paramPills.push('--no ' + noMatch[1]);
-          return;
+          const noText = noMatch[1];
+          // Filter out MJ UI messages like "profiles found", "moodboards found", etc.
+          const uiPatterns = /found|available|results?|items?|images?|loading|error/i;
+          if (!uiPatterns.test(noText)) {
+            parameters.no = noText;
+            seenPillText.add(lower);
+            return;
+          }
+          return; // Skip UI text, don't mark as seen pill
         }
         // Motion (video): "motion low/med/high"
         const motionMatch = lower.match(/^motion\s+(\w+)$/);
         if (motionMatch) {
           parameters.motion = motionMatch[1];
-          paramPills.push('--motion ' + motionMatch[1]);
+          seenPillText.add(lower);
           return;
         }
         // Duration (video): "5.2s"
         if (text.match(/^\d+\.?\d*s$/)) {
           parameters.duration = text;
+          seenPillText.add(lower);
           return;
         }
       });
 
-      // Build multi-value --sref pill (space-separated codes)
+      // Build multi-value --sref (space-separated codes)
       if (srefCodes.length > 0) {
         parameters.sref = srefCodes.join(' ');
-        paramPills.push('--sref ' + srefCodes.join(' '));
       }
 
       // Extract omni reference (oref) thumbnail images.
@@ -425,13 +436,6 @@
       if (orefUrls.length > 0) {
         parameters.oref_urls = orefUrls;
         console.log('Hearted: Found', orefUrls.length, 'oref images');
-      }
-
-      // Reconstruct full prompt with parameters appended
-      // so the server's parse_prompt() can extract everything
-      if (prompt && paramPills.length > 0) {
-        prompt = prompt + ' ' + paramPills.join(' ');
-        console.log('Hearted: Reconstructed prompt with params:', prompt.substring(0, 100) + '...');
       }
 
       // Get username
@@ -1265,14 +1269,16 @@
     if (hasPrompt) CAPTURED_LIKES.add(jobId + ':prompt');
 
     try {
+      const params = data.raw_data.parameters || {};
       const payload = {
         image_url: data.image_url,
         job_id: jobId,
         prompt_text: data.raw_data.prompt || '',
-        source: 'explore'
+        source: 'explore',
+        parameters: params
       };
-      if (data.raw_data.parameters?.oref_urls?.length > 0) {
-        payload.oref_urls = data.raw_data.parameters.oref_urls;
+      if (params.oref_urls?.length > 0) {
+        payload.oref_urls = params.oref_urls;
       }
       if (data.raw_data.username) {
         payload.username = data.raw_data.username;
