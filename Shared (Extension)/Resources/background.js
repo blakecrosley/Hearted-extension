@@ -82,6 +82,13 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === 'captureLike') {
+    captureLike(message.data)
+      .then(result => sendResponse({ success: true, data: result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
   if (message.action === 'captureSref') {
     captureSref(message.data)
       .then(result => sendResponse({ success: true, data: result }))
@@ -181,6 +188,58 @@ async function captureMidjourney(data) {
   }
 
   return response.json();
+}
+
+// Capture a liked image → sk1ff.com (midjourney-studio prod)
+async function captureLike(data) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+
+  const payload = {
+    image_url: data.image_url,
+    source: data.source || 'explore'
+  };
+  if (data.job_id) payload.job_id = data.job_id;
+  if (data.prompt_text) payload.prompt_text = data.prompt_text;
+
+  // Download the image in the extension (we have MJ domain access)
+  if (data.image_url) {
+    try {
+      const imgResp = await fetch(data.image_url);
+      if (imgResp.ok) {
+        const blob = await imgResp.blob();
+        if (blob.size <= 10 * 1024 * 1024) {
+          payload.image_data = await blobToBase64(blob);
+          payload.image_content_type = blob.type || 'image/webp';
+        }
+      }
+    } catch (e) {
+      console.warn('Hearted BG: Failed to download like image:', e.message);
+    }
+  }
+
+  try {
+    const response = await fetch(
+      `${BACKENDS['midjourney-studio-prod']}/profiles/api/ingest-like`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      }
+    );
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `API error: ${response.status}`);
+    }
+    return response.json();
+  } catch (e) {
+    clearTimeout(timeout);
+    if (e.name === 'AbortError') throw new Error('sk1ff.com unreachable');
+    throw e;
+  }
 }
 
 // Update Instagram item with image
