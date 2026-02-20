@@ -201,6 +201,9 @@ async function captureLike(data) {
   };
   if (data.job_id) payload.job_id = data.job_id;
   if (data.prompt_text) payload.prompt_text = data.prompt_text;
+  if (data.parameters) payload.parameters = data.parameters;
+  if (data.oref_urls) payload.oref_urls = data.oref_urls;
+  if (data.username) payload.username = data.username;
 
   // Download the image in the extension (we have MJ domain access)
   if (data.image_url) {
