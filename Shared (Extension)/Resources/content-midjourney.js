@@ -1300,48 +1300,22 @@
     }
   }
 
-  async function scanAndCaptureLikes() {
+  // Track last captured job to avoid re-capturing on DOM mutations
+  let lastCapturedJobPath = '';
+
+  async function autoCaptureCurrentDetail() {
+    // Only capture from detail views — never scan grid thumbnails
     if (!likesAutoCapturing) return;
+    const isDetail = window.location.pathname.includes('/jobs/');
+    if (!isDetail) return;
 
-    const imageLinks = document.querySelectorAll('a[href*="/jobs/"]');
-    console.log('Hearted Likes: Scanning ' + imageLinks.length + ' liked images');
-    let captured = 0;
+    // Don't re-capture same detail view on DOM mutations
+    if (lastCapturedJobPath === window.location.pathname) return;
+    lastCapturedJobPath = window.location.pathname;
 
-    for (const link of imageLinks) {
-      if (!likesAutoCapturing) break;
-
-      const imageEl = link.querySelector('[style*="background-image"]') ||
-                      link.querySelector('img[src*="cdn.midjourney.com"]') ||
-                      link;
-
-      const data = extractLikeImageData(imageEl);
-      if (!data) continue;
-
-      CAPTURED_LIKES.add(data.job_id);
-      try {
-        await captureLikeItem({
-          image_url: data.image_url,
-          job_id: data.job_id,
-          source: 'explore'
-        });
-        link.style.outline = '3px solid #22c55e';
-        link.style.outlineOffset = '-3px';
-        captured++;
-        likesCaptureCount++;
-        updateLikesCaptureUI();
-      } catch (e) {
-        console.warn('Hearted Likes: Failed to capture ' + data.job_id + ':', e.message);
-        if (e.message.includes('unreachable') || e.message.includes('Failed to fetch')) {
-          likesAutoCapturing = false;
-          updateLikesCaptureUI();
-          showToast('Server unreachable \u2014 auto-capture stopped', true);
-          return;
-        }
-      }
-    }
-
-    if (captured > 0) {
-      console.log('Hearted Likes: Captured ' + captured + ' new liked images');
+    const captured = await captureCurrentDetailAsLike();
+    if (captured) {
+      console.log('Hearted Likes: Auto-captured from detail view');
     }
   }
 
@@ -1419,15 +1393,14 @@
     singleBtn.addEventListener('click', () => captureCurrentDetailAsLike());
     toggleBtn.addEventListener('click', () => {
       likesAutoCapturing = !likesAutoCapturing;
+      lastCapturedJobPath = ''; // Reset so current detail can be captured
       updateLikesCaptureUI();
       if (likesAutoCapturing) {
         const isDetail = window.location.pathname.includes('/jobs/');
         if (isDetail) {
-          // In detail view — capture current, then auto-capture on navigation
           captureCurrentDetailAsLike();
         } else {
-          // In grid — scan visible images
-          scanAndCaptureLikes();
+          showToast('Open an image to start capturing');
         }
       }
     });
@@ -1477,13 +1450,13 @@
     console.log('Hearted: Likes mode active, initializing likes capture');
     createLikesCaptureUI();
 
-    // Watch for new images (infinite scroll) + auto-capture on scroll
-    let scrollTimeout;
+    // Watch for navigation to detail views (SPA URL changes) + auto-capture
+    let navTimeout;
     likesObserver = new MutationObserver(() => {
-      clearTimeout(scrollTimeout);
-      scrollTimeout = setTimeout(() => {
-        if (likesAutoCapturing) scanAndCaptureLikes();
-      }, 300);
+      clearTimeout(navTimeout);
+      navTimeout = setTimeout(() => {
+        if (likesAutoCapturing) autoCaptureCurrentDetail();
+      }, 800); // Wait for detail view to render
     });
     likesObserver.observe(document.body, { childList: true, subtree: true });
 
