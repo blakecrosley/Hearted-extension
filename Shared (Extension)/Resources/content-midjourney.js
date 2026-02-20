@@ -244,6 +244,7 @@
       // "ow 275", "stylize 1000", "profile zojb2s8" near the prompt text.
       const parameters = {};
       const paramPills = [];
+      const srefCodes = []; // Collect multiple --sref values
 
       // Find parameter pills — they're typically small chip/badge elements
       // near the prompt, containing known parameter names
@@ -304,11 +305,10 @@
           paramPills.push('--seed ' + seedMatch[1]);
           return;
         }
-        // Sref: "sref 12345"
+        // Sref: "sref 12345" — collect ALL sref codes (multi-value supported)
         const srefMatch = lower.match(/^sref\s+(\d+)$/);
         if (srefMatch) {
-          parameters.sref = srefMatch[1];
-          paramPills.push('--sref ' + srefMatch[1]);
+          srefCodes.push(srefMatch[1]);
           return;
         }
         // Version: "v 7" or "version 7"
@@ -316,6 +316,13 @@
         if (vMatch) {
           parameters.version = vMatch[1];
           paramPills.push('--v ' + vMatch[1]);
+          return;
+        }
+        // Niji: "niji 7"
+        const nijiMatch = lower.match(/^niji\s+(\d+)$/);
+        if (nijiMatch) {
+          parameters.version = 'niji ' + nijiMatch[1];
+          paramPills.push('--niji ' + nijiMatch[1]);
           return;
         }
         // Quality: "quality 1" or "q 1"
@@ -332,6 +339,47 @@
           paramPills.push('--weird ' + weirdMatch[1]);
           return;
         }
+        // Exp (experimental): "exp 25"
+        const expMatch = lower.match(/^exp\s+(\d+)$/);
+        if (expMatch) {
+          parameters.exp = expMatch[1];
+          paramPills.push('--exp ' + expMatch[1]);
+          return;
+        }
+        // Style weight: "sw 150"
+        const swMatch = lower.match(/^sw\s+(\d+)$/);
+        if (swMatch) {
+          parameters.sw = swMatch[1];
+          paramPills.push('--sw ' + swMatch[1]);
+          return;
+        }
+        // Image weight: "iw 1.5"
+        const iwMatch = lower.match(/^iw\s+([\d.]+)$/);
+        if (iwMatch) {
+          parameters.iw = iwMatch[1];
+          paramPills.push('--iw ' + iwMatch[1]);
+          return;
+        }
+        // Profile weight: "pw 50"
+        const pwMatch = lower.match(/^pw\s+(\d+)$/);
+        if (pwMatch) {
+          parameters.pw = pwMatch[1];
+          paramPills.push('--pw ' + pwMatch[1]);
+          return;
+        }
+        // Repeat: "repeat 4"
+        const repeatMatch = lower.match(/^repeat\s+(\d+)$/);
+        if (repeatMatch) {
+          parameters.repeat = repeatMatch[1];
+          paramPills.push('--repeat ' + repeatMatch[1]);
+          return;
+        }
+        // Draft mode
+        if (lower === 'draft') {
+          parameters.draft = true;
+          paramPills.push('--draft');
+          return;
+        }
         // No (negative prompt): starts with "no "
         const noMatch = lower.match(/^no\s+(.+)$/);
         if (noMatch) {
@@ -343,6 +391,7 @@
         const motionMatch = lower.match(/^motion\s+(\w+)$/);
         if (motionMatch) {
           parameters.motion = motionMatch[1];
+          paramPills.push('--motion ' + motionMatch[1]);
           return;
         }
         // Duration (video): "5.2s"
@@ -351,6 +400,12 @@
           return;
         }
       });
+
+      // Build multi-value --sref pill (space-separated codes)
+      if (srefCodes.length > 0) {
+        parameters.sref = srefCodes.join(' ');
+        paramPills.push('--sref ' + srefCodes.join(' '));
+      }
 
       // Extract omni reference (oref) thumbnail images.
       // These appear as a row of small clickable images between the prompt
