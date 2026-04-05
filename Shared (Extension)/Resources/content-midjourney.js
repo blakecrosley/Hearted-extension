@@ -1427,16 +1427,16 @@
 
   // Track likes mode across SPA navigation (detail views lose tab=likes from URL)
   function enterLikesMode() {
-    try { sessionStorage.setItem('hearted-likes-mode', 'true'); } catch (e) {}
+    try { sessionStorage.setItem('_lm', 'true'); } catch (e) {}
   }
   function exitLikesMode() {
-    try { sessionStorage.removeItem('hearted-likes-mode'); } catch (e) {}
+    try { sessionStorage.removeItem('_lm'); } catch (e) {}
   }
   function isInLikesMode() {
     if (isLikesTab()) return true;
     // Detail view navigated from likes tab
     if (window.location.pathname.includes('/jobs/')) {
-      try { return sessionStorage.getItem('hearted-likes-mode') === 'true'; } catch (e) {}
+      try { return sessionStorage.getItem('_lm') === 'true'; } catch (e) {}
     }
     return false;
   }

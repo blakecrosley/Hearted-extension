@@ -124,6 +124,21 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
+
+  // Suno queue operations (same backend, filtered by source=suno)
+  if (message.action === 'getSunoQueueItems') {
+    getSunoQueueItems(message.status || 'pending')
+      .then(result => sendResponse({ success: true, data: result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
+  if (message.action === 'markSunoQueueItemDone') {
+    markQueueItemDone(message.itemId)
+      .then(result => sendResponse({ success: true, data: result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
 });
 
 // Capture a generic URL
@@ -363,6 +378,29 @@ async function getQueueItems(status) {
   try {
     const response = await fetch(
       `${BACKENDS['midjourney-studio-prod']}/queue/api/items?status=${encodeURIComponent(status)}`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    return response.json();
+  } catch (e) {
+    clearTimeout(timeout);
+    if (e.name === 'AbortError') throw new Error('sk1ff.com unreachable');
+    throw e;
+  }
+}
+
+// Fetch pending Suno queue items from sk1ff.com (filtered by source=suno)
+async function getSunoQueueItems(status) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const response = await fetch(
+      `${BACKENDS['midjourney-studio-prod']}/queue/api/items?status=${encodeURIComponent(status)}&source=suno`,
       { signal: controller.signal }
     );
     clearTimeout(timeout);
