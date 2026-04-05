@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Hearted",
-  "version": "3.2.0",
+  "version": "3.2.1",
   "description": "Save anything you love to your personal archive",
   "permissions": ["activeTab", "storage"],
   "host_permissions": ["<all_urls>"],
