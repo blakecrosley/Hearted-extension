@@ -139,6 +139,14 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
+
+  // Greenhouse harvest — batch send discovered slugs
+  if (message.action === 'captureGreenhouseSlugs') {
+    captureGreenhouseSlugs(message.data)
+      .then(result => sendResponse({ success: true, data: result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
 });
 
 // Capture a generic URL
@@ -441,6 +449,33 @@ async function markQueueItemDone(itemId) {
     clearTimeout(timeout);
     if (e.name === 'AbortError') throw new Error('sk1ff.com unreachable');
     throw e;
+  }
+}
+
+// Capture greenhouse/ATS slugs — POST to sk1ff.com scrape-harvest endpoint
+async function captureGreenhouseSlugs(data) {
+  try {
+    const response = await fetch(`${BACKENDS['midjourney-studio-prod']}/queue/api/scrape-harvest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slugs: data.slugs || [],
+        new_slugs: data.new_slugs || [],
+        source: data.source || 'greenhouse',
+        page: data.page || 0,
+        query: data.query || '',
+      })
+    });
+
+    if (!response.ok) {
+      console.warn('[GH Harvest] sk1ff POST failed:', response.status);
+      return { stored: 'local-only', slugs: data.slugs?.length || 0 };
+    }
+
+    return response.json();
+  } catch (e) {
+    console.warn('[GH Harvest] sk1ff unreachable:', e.message);
+    return { stored: 'local-only', slugs: data.slugs?.length || 0 };
   }
 }
 

@@ -44,6 +44,17 @@
       "matches": ["*://suno.com/*", "*://www.suno.com/*"],
       "js": ["content-suno-queue.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://www.google.com/*", "*://google.com/*"],
+      "js": ["content-greenhouse-harvest.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["gh-known-slugs.json"],
+      "matches": ["*://www.google.com/*", "*://google.com/*"]
     }
   ],
   "background": {
