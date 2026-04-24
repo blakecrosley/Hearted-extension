@@ -147,7 +147,32 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
+
+  // DOM capture to local dev endpoint on resumegeni. Used for sites
+  // that block headless browsers (Turnstile etc.) — the user's real
+  // browser does the fetch, the extension ships the rendered DOM to
+  // a local file that the coding agent can read.
+  if (message.action === 'captureDomLocal') {
+    captureDomLocal(message.data)
+      .then(result => sendResponse({ success: true, data: result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
 });
+
+// DOM capture: POST to local resumegeni dev endpoint.
+async function captureDomLocal(data) {
+  const endpoint = 'http://127.0.0.1:8001/dev/hearted-dom';
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  if (!response.ok) {
+    throw new Error(`local dev endpoint error: ${response.status}`);
+  }
+  return await response.json();
+}
 
 // Capture a generic URL
 async function captureItem(data) {

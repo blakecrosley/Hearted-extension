@@ -49,6 +49,11 @@
       "matches": ["*://www.google.com/*", "*://google.com/*"],
       "js": ["content-greenhouse-harvest.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://trueup.io/*", "*://www.trueup.io/*"],
+      "js": ["content-trueup.js"],
+      "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
