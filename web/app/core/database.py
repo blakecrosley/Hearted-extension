@@ -7,10 +7,13 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 # Database URL from environment
+# Railway provides postgresql:// but asyncpg needs postgresql+asyncpg://
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql+asyncpg://hearted:hearted@localhost:5432/hearted",
 )
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 # Create async engine
 engine = create_async_engine(
