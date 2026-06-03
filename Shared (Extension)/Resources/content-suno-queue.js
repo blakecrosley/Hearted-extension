@@ -428,9 +428,10 @@
   // React controls these inputs, so we need to use the native setter
   // to bypass React's synthetic event system, then dispatch an input event.
   function setFieldValue(el, value) {
-    if (!el) return;
+    if (!el) return false;
 
     if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+      el.focus();
       const proto = el.tagName === 'TEXTAREA'
         ? window.HTMLTextAreaElement.prototype
         : window.HTMLInputElement.prototype;
@@ -440,13 +441,33 @@
       } else {
         el.value = value;
       }
-    } else if (el.isContentEditable || el.getAttribute('contenteditable') === 'true' || el.getAttribute('role') === 'textbox') {
-      el.focus();
-      el.textContent = value;
+      // Suno's create fields are React-controlled. The native prototype setter
+      // above bypasses React's value tracker; React then detects the change via
+      // a native 'input' InputEvent (a plain Event is ignored by newer React).
+      let evt;
+      try {
+        evt = new InputEvent('input', { bubbles: true, data: value, inputType: 'insertText' });
+      } catch (_) {
+        evt = new Event('input', { bubbles: true });
+      }
+      el.dispatchEvent(evt);
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      return el.value === value;
     }
 
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
+    if (el.isContentEditable || el.getAttribute('contenteditable') === 'true' || el.getAttribute('role') === 'textbox') {
+      el.focus();
+      el.textContent = value;
+      try {
+        el.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      } catch (_) {
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      return (el.textContent || '') === value;
+    }
+
+    return false;
   }
 
   function isVisible(el) {
@@ -465,11 +486,10 @@
 
   function findStyleField() {
     const directMatch = findFirstField([
+      '[data-testid="create-form-styles-wrapper"] textarea',
       'textarea[maxlength="1000"]:not([data-testid="lyrics-textarea"])',
-      'textarea[placeholder*="Describe"]',
-      'textarea[aria-label*="Style"]',
-      '[contenteditable="true"][role="textbox"]',
-      '[role="textbox"][aria-label*="Style"]'
+      'textarea[aria-label*="Style" i]',
+      '[role="textbox"][aria-label*="Style" i]'
     ]);
     if (directMatch) return directMatch;
 
@@ -573,12 +593,14 @@
       }
     });
 
-    // If we expanded sections, wait for React to render before injecting
+    // If we expanded sections, wait for React to render before injecting.
+    // NOTE: Suno removed the inline Song Title field from the create form, so
+    // title is not counted toward `expected` (it can never be filled here).
     const doInject = (attempt = 0) => {
       const filled = fillSunoFields(style, lyrics, title, exclude);
-      const expected = (style ? 1 : 0) + (lyrics ? 1 : 0) + (title ? 1 : 0) + (exclude ? 1 : 0);
+      const expected = (style ? 1 : 0) + (lyrics ? 1 : 0) + (exclude ? 1 : 0);
 
-      if (filled === expected || attempt >= 7) {
+      if (filled >= expected || attempt >= 7) {
         if (callback) callback(filled > 0);
         return;
       }
@@ -586,12 +608,9 @@
       setTimeout(() => doInject(attempt + 1), 200);
     };
 
-    if (needsDelay) {
-      setTimeout(() => doInject(0), 250);
-      return true; // assume success, callback will confirm
-    } else {
-      return fillSunoFields(style, lyrics, title, exclude) > 0;
-    }
+    // Accordion expansion (More Options, holding Exclude) animates in, so wait
+    // a beat before the first injection attempt.
+    setTimeout(() => doInject(0), needsDelay ? 300 : 0);
   }
 
   // --- Rendering ---
@@ -672,23 +691,25 @@
       pasteBtn.className = 'action-btn paste-btn';
       pasteBtn.textContent = 'Paste';
       pasteBtn.addEventListener('click', () => {
-        const success = injectIntoSuno(item);
-        if (success) {
-          pasteBtn.textContent = '\u2713 Pasted';
-          pasteBtn.classList.add('pasted');
-          row.classList.add('copied-state');
-          if (autoDone) {
-            markItemDone(row, item);
+        pasteBtn.textContent = '\u2026';
+        injectIntoSuno(item, (success) => {
+          if (success) {
+            pasteBtn.textContent = '\u2713 Pasted';
+            pasteBtn.classList.add('pasted');
+            row.classList.add('copied-state');
+            if (autoDone) {
+              markItemDone(row, item);
+            } else {
+              setTimeout(() => {
+                pasteBtn.textContent = 'Paste';
+                pasteBtn.classList.remove('pasted');
+              }, 2000);
+            }
           } else {
-            setTimeout(() => {
-              pasteBtn.textContent = 'Paste';
-              pasteBtn.classList.remove('pasted');
-            }, 2000);
+            pasteBtn.textContent = 'No fields found';
+            setTimeout(() => { pasteBtn.textContent = 'Paste'; }, 2000);
           }
-        } else {
-          pasteBtn.textContent = 'No fields found';
-          setTimeout(() => { pasteBtn.textContent = 'Paste'; }, 2000);
-        }
+        });
       });
       actions.appendChild(pasteBtn);
 
