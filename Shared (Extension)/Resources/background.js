@@ -559,3 +559,24 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 });
+
+// Harvest: ship an image (fetched in-page with Blake's session) to the
+// local art pipeline so Claude can judge it.
+async function harvestImage(payload) {
+  const response = await fetch('http://localhost:8200/api/curation/harvest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw new Error(`harvest error: ${response.status}`);
+  return response.json();
+}
+
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'harvestImage') {
+    harvestImage(message.payload)
+      .then(result => sendResponse({ success: true, data: result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+});

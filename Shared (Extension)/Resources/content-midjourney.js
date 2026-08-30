@@ -1653,3 +1653,91 @@
   setInterval(fetchCuration, 60000);
   fetchCuration();
 })();
+
+// === Harvest for Claude ===
+// One button: grabs every visible job card's image via the page's own
+// session and ships it to localhost:8200 → ~/Reps-Art/01-raw/harvest.
+// Reads only; nothing is clicked or written on MJ.
+(function () {
+  'use strict';
+
+  let harvesting = false;
+  const SENT = new Set();
+
+  function toast(msg) {
+    let t = document.getElementById('claude-harvest-toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'claude-harvest-toast';
+      t.style.cssText = 'position:fixed;bottom:56px;left:14px;z-index:99999;background:rgba(20,20,20,.92);color:#E8E6DB;font:600 12px/1.8 -apple-system,sans-serif;padding:4px 12px;border-radius:999px;border:1.5px solid #57574D;';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    clearTimeout(t._h); t._h = setTimeout(() => t.remove(), 5000);
+  }
+
+  function jobCards() {
+    const seen = new Map();
+    document.querySelectorAll('a[href*="/jobs/"]').forEach(a => {
+      const m = a.href.match(/jobs\/([0-9a-f-]{36})/);
+      if (!m) return;
+      const img = a.querySelector('img');
+      if (!img) return;
+      const src = img.currentSrc || img.src;
+      if (!src || !src.includes('cdn.midjourney.com')) return;
+      if (!seen.has(m[1])) seen.set(m[1], { src, alt: img.alt || '' });
+    });
+    return seen;
+  }
+
+  async function harvestOne(jobId, info) {
+    const resp = await fetch(info.src);
+    if (!resp.ok) throw new Error(`fetch ${resp.status}`);
+    const blob = await resp.blob();
+    const ext = (blob.type.split('/')[1] || 'webp').replace('jpeg', 'jpg');
+    const b64 = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(String(r.result).split(',')[1]);
+      r.onerror = rej;
+      r.readAsDataURL(blob);
+    });
+    return new Promise((resolve) => {
+      browser.runtime.sendMessage({
+        action: 'harvestImage',
+        payload: { job_id: jobId, image_base64: b64, ext, prompt: info.alt, page: location.pathname }
+      }, (r) => resolve(r && r.success));
+    });
+  }
+
+  async function harvestVisible() {
+    if (harvesting) return;
+    harvesting = true;
+    const cards = jobCards();
+    const todo = [...cards.entries()].filter(([id]) => !SENT.has(id));
+    let ok = 0, fail = 0;
+    toast(`Harvesting ${todo.length} images for Claude…`);
+    for (const [id, info] of todo) {
+      try {
+        if (await harvestOne(id, info)) { SENT.add(id); ok++; }
+        else fail++;
+      } catch (e) { fail++; }
+      toast(`Harvest: ${ok} sent${fail ? `, ${fail} failed` : ''} / ${todo.length}`);
+      await new Promise(r => setTimeout(r, 350));
+    }
+    toast(`Harvest done: ${ok} sent${fail ? `, ${fail} failed` : ''}`);
+    harvesting = false;
+  }
+
+  function addButton() {
+    if (document.getElementById('claude-harvest-btn')) return;
+    const b = document.createElement('button');
+    b.id = 'claude-harvest-btn';
+    b.textContent = '⇣ Harvest for Claude';
+    b.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:99999;background:#141414;color:#25D59D;font:700 12px/1.6 -apple-system,sans-serif;padding:6px 14px;border-radius:999px;border:1.5px solid #25D59D;cursor:pointer;';
+    b.addEventListener('click', harvestVisible);
+    document.body.appendChild(b);
+  }
+
+  addButton();
+  new MutationObserver(() => addButton()).observe(document.body, { childList: true, subtree: true });
+})();
