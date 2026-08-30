@@ -1654,31 +1654,48 @@
   fetchCuration();
 })();
 
-// === Harvest for Claude (v2: continuous) ===
-// Toggle: auto-scrolls the archive and ships every job card's image via
-// the page's own session to localhost:8200 → ~/Reps-Art/01-raw/harvest.
-// Runs until clicked again or the page stops yielding new cards.
-// Reads only; nothing on MJ is clicked or written.
+// === Harvest for Claude (v4: verified ingest) ===
+// Continuous harvest with the sref-page pattern: every job card wears a
+// badge (green check = on the server, gray dot = not yet), and the HUD
+// shows counts checked against the server live. Scrolling drives the
+// window, the real scroll container, wheel events, and End keys — MJ's
+// virtualized archive obeys at least one of them.
 (function () {
   'use strict';
 
   let running = false;
-  const SENT = new Set();
+  const SENT = new Set();      // shipped this session
+  const ONSERVER = new Set();  // confirmed on server (pre-marked at load)
   let totalSent = 0, totalFail = 0;
 
-  function toast(msg) {
-    let t = document.getElementById('claude-harvest-toast');
-    if (!t) {
-      t = document.createElement('div');
-      t.id = 'claude-harvest-toast';
-      t.style.cssText = 'position:fixed;bottom:56px;left:14px;z-index:99999;background:rgba(20,20,20,.92);color:#E8E6DB;font:600 12px/1.8 -apple-system,sans-serif;padding:4px 12px;border-radius:999px;border:1.5px solid #57574D;';
-      document.body.appendChild(t);
+  function hud() {
+    let h = document.getElementById('claude-harvest-hud');
+    if (!h) {
+      h = document.createElement('div');
+      h.id = 'claude-harvest-hud';
+      h.style.cssText = 'position:fixed;bottom:52px;right:14px;z-index:99999;background:rgba(20,20,20,.94);color:#E8E6DB;font:600 11px/1.7 -apple-system,sans-serif;padding:6px 12px;border-radius:10px;border:1.5px solid #57574D;text-align:right;white-space:pre;';
+      document.body.appendChild(h);
     }
-    t.textContent = msg;
-    clearTimeout(t._h); t._h = setTimeout(() => t.remove(), 8000);
+    return h;
   }
 
-  function jobCards() {
+  function refreshStats() {
+    try {
+      browser.runtime.sendMessage({ action: 'getHarvestStats' }, (r) => {
+        if (r && r.success) {
+          (r.data.job_ids || []).forEach(id => ONSERVER.add(id));
+          const pageCount = cards().size;
+          hud().textContent =
+            `page: ${pageCount} jobs\nrun: ${totalSent} sent${totalFail ? ` · ${totalFail} fail` : ''}\nserver: ${r.data.jobs} jobs · ${r.data.files} files`;
+          badgeAll();
+        } else {
+          hud().textContent = 'server: unreachable';
+        }
+      });
+    } catch (e) {}
+  }
+
+  function cards() {
     const seen = new Map();
     document.querySelectorAll('a[href*="/jobs/"]').forEach(a => {
       const m = a.href.match(/jobs\/([0-9a-f-]{36})/);
@@ -1687,19 +1704,28 @@
       if (!img) return;
       const src = img.currentSrc || img.src;
       if (!src || !src.includes('cdn.midjourney.com')) return;
-      if (!seen.has(m[1])) seen.set(m[1], { src, alt: img.alt || '' });
+      if (!seen.has(m[1])) seen.set(m[1], { a, src, alt: img.alt || '' });
     });
     return seen;
   }
 
-  function findScroller() {
-    const card = document.querySelector('a[href*="/jobs/"]');
-    let el = card;
-    while (el && el !== document.body) {
-      if (el.scrollHeight > el.clientHeight + 100 && ['auto', 'scroll'].includes(getComputedStyle(el).overflowY)) return el;
-      el = el.parentElement;
+  function badge(a, jobId) {
+    let b = a.querySelector('.claude-hv-badge');
+    if (!b) {
+      b = document.createElement('span');
+      b.className = 'claude-hv-badge';
+      b.style.cssText = 'position:absolute;bottom:6px;right:6px;z-index:9998;width:18px;height:18px;border-radius:50%;font:700 12px/18px -apple-system,sans-serif;text-align:center;pointer-events:none;';
+      if (getComputedStyle(a).position === 'static') a.style.position = 'relative';
+      a.appendChild(b);
     }
-    return document.scrollingElement || document.documentElement;
+    const done = ONSERVER.has(jobId) || SENT.has(jobId);
+    b.textContent = done ? '✓' : '·';
+    b.style.background = done ? '#25D59D' : 'rgba(60,60,60,.85)';
+    b.style.color = done ? '#06130d' : '#aaa';
+  }
+
+  function badgeAll() {
+    cards().forEach((info, id) => badge(info.a, id));
   }
 
   async function fetchAsB64(url) {
@@ -1717,64 +1743,80 @@
     return { b64, ext };
   }
 
-  function ship(jobId, idx, img, info) {
+  function ship(jobId, idxN, img, info) {
     return new Promise((resolve) => {
       browser.runtime.sendMessage({
         action: 'harvestImage',
-        payload: { job_id: jobId, image_base64: img.b64, ext: img.ext, idx,
+        payload: { job_id: jobId, image_base64: img.b64, ext: img.ext, idx: idxN,
                    prompt: info.alt, page: location.pathname }
       }, (r) => resolve(r && r.success));
     });
   }
 
-  // Full-res first: construct variant URLs from the job id (the page's
-  // session authorizes the CDN). Falls back to the grid thumbnail.
   async function harvestOne(jobId, info) {
     let shipped = 0;
-    for (let idx = 0; idx < 4; idx++) {
-      let img = await fetchAsB64(`https://cdn.midjourney.com/${jobId}/0_${idx}.webp`);
-      if (!img) img = await fetchAsB64(`https://cdn.midjourney.com/${jobId}/0_${idx}.png`);
-      if (!img) break; // single-image jobs stop at the first missing variant
-      if (await ship(jobId, idx, img, info)) shipped++;
-      await new Promise(r => setTimeout(r, 150));
+    for (let i = 0; i < 4; i++) {
+      let img = await fetchAsB64(`https://cdn.midjourney.com/${jobId}/0_${i}.webp`);
+      if (!img) img = await fetchAsB64(`https://cdn.midjourney.com/${jobId}/0_${i}.png`);
+      if (!img) break;
+      if (await ship(jobId, i, img, info)) shipped++;
+      await new Promise(r => setTimeout(r, 120));
     }
     if (shipped === 0) {
       const img = await fetchAsB64(info.src);
       if (img && await ship(jobId, 0, img, info)) shipped = 1;
     }
-    if (shipped === 0) throw new Error('no variants fetched');
+    if (shipped === 0) throw new Error('no variants');
     return true;
   }
 
   async function harvestPass() {
-    const todo = [...jobCards().entries()].filter(([id]) => !SENT.has(id));
+    const todo = [...cards().entries()].filter(([id]) => !SENT.has(id) && !ONSERVER.has(id));
     for (const [id, info] of todo) {
       if (!running) return 0;
       try {
-        if (await harvestOne(id, info)) { SENT.add(id); totalSent++; }
+        if (await harvestOne(id, info)) { SENT.add(id); totalSent++; badge(info.a, id); }
         else totalFail++;
       } catch (e) { totalFail++; }
-      toast(`Harvesting: ${totalSent} sent${totalFail ? `, ${totalFail} failed` : ''} — click button to stop`);
-      await new Promise(r => setTimeout(r, 300));
+      if (totalSent % 5 === 0) refreshStats();
+      hud().textContent = `harvesting…\nrun: ${totalSent} sent${totalFail ? ` · ${totalFail} fail` : ''}`;
+      await new Promise(r => setTimeout(r, 250));
     }
     return todo.length;
   }
 
+  function forceScroll() {
+    const before = (document.scrollingElement || document.documentElement).scrollTop;
+    const step = Math.round(window.innerHeight * 0.85);
+    window.scrollBy(0, step);
+    // custom containers: walk up from a card
+    const card = document.querySelector('a[href*="/jobs/"]');
+    let el = card;
+    while (el && el !== document.body) {
+      if (el.scrollHeight > el.clientHeight + 100) { el.scrollTop += step; }
+      el = el.parentElement;
+    }
+    // wheel + End key for stubborn virtualized lists
+    const target = card || document.body;
+    target.dispatchEvent(new WheelEvent('wheel', { deltaY: step, bubbles: true, cancelable: true }));
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', code: 'End', bubbles: true }));
+    return () => (document.scrollingElement || document.documentElement).scrollTop !== before;
+  }
+
   async function harvestLoop(btn) {
-    const scroller = findScroller();
-    let dryPasses = 0;
-    while (running && dryPasses < 6) {
+    let dry = 0;
+    refreshStats();
+    while (running && dry < 10) {
       const got = await harvestPass();
       if (!running) break;
-      scroller.scrollBy ? scroller.scrollBy(0, window.innerHeight * 0.85)
-                        : (scroller.scrollTop += window.innerHeight * 0.85);
-      await new Promise(r => setTimeout(r, 1300));
-      dryPasses = got === 0 ? dryPasses + 1 : 0;
+      forceScroll();
+      await new Promise(r => setTimeout(r, 1600));
+      dry = got === 0 ? dry + 1 : 0;
     }
     running = false;
     btn.textContent = '⇣ Harvest for Claude';
     btn.style.background = '#141414';
-    toast(`Harvest ${dryPasses >= 6 ? 'reached the end' : 'stopped'}: ${totalSent} sent${totalFail ? `, ${totalFail} failed` : ''}`);
+    refreshStats();
   }
 
   function addButton() {
@@ -1799,5 +1841,7 @@
   }
 
   addButton();
-  new MutationObserver(() => addButton()).observe(document.body, { childList: true, subtree: true });
+  refreshStats();
+  setInterval(refreshStats, 30000);
+  new MutationObserver(() => { addButton(); badgeAll(); }).observe(document.body, { childList: true, subtree: true });
 })();

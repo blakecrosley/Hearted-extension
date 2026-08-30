@@ -580,3 +580,14 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 });
+
+// Harvest stats for the on-page HUD check.
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'getHarvestStats') {
+    fetch('http://localhost:8200/api/curation/harvest/stats')
+      .then(r => r.json())
+      .then(data => sendResponse({ success: true, data }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+});
