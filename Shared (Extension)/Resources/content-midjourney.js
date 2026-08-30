@@ -1719,7 +1719,9 @@
       a.appendChild(b);
     }
     const done = ONSERVER.has(jobId) || SENT.has(jobId);
-    b.textContent = done ? '✓' : '·';
+    const want = done ? '✓' : '·';
+    if (b.textContent === want) return; // no-op → no mutation churn
+    b.textContent = want;
     b.style.background = done ? '#25D59D' : 'rgba(60,60,60,.85)';
     b.style.color = done ? '#06130d' : '#aaa';
   }
@@ -1843,5 +1845,12 @@
   addButton();
   refreshStats();
   setInterval(refreshStats, 30000);
-  new MutationObserver(() => { addButton(); badgeAll(); }).observe(document.body, { childList: true, subtree: true });
+  setInterval(badgeAll, 3000); // slow sweep — never rides the mutation storm
+  let btnTimer = null;
+  new MutationObserver((muts) => {
+    if (muts.every(m => [...m.addedNodes].every(n =>
+        n.nodeType === 1 && (n.classList?.contains('claude-hv-badge') || n.id === 'claude-harvest-hud')))) return;
+    clearTimeout(btnTimer);
+    btnTimer = setTimeout(addButton, 1200);
+  }).observe(document.body, { childList: true, subtree: true });
 })();
