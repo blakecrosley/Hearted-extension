@@ -517,3 +517,45 @@ browser.commands?.onCommand?.addListener((command) => {
     });
   }
 });
+
+// === Claude curation (localhost:8200) ===
+// Claude pushes a shortlist of job IDs; content-midjourney.js highlights
+// them so Blake can heart the winners himself. Reads/acks only — the
+// extension never clicks hearts.
+const CURATION_BASE = 'http://localhost:8200/api/curation';
+
+async function getCurationItems() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(`${CURATION_BASE}?status=pending`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    return response.json();
+  } catch (e) {
+    clearTimeout(timeout);
+    if (e.name === 'AbortError') throw new Error('curation server (localhost:8200) unreachable');
+    throw e;
+  }
+}
+
+async function markCuration(jobId, status) {
+  const response = await fetch(`${CURATION_BASE}/${encodeURIComponent(jobId)}/${encodeURIComponent(status)}`, { method: 'POST' });
+  if (!response.ok) throw new Error(`API error: ${response.status}`);
+  return response.json();
+}
+
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'getCurationItems') {
+    getCurationItems()
+      .then(result => sendResponse({ success: true, data: result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+  if (message.action === 'markCuration') {
+    markCuration(message.jobId, message.status || 'liked')
+      .then(result => sendResponse({ success: true, data: result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+});

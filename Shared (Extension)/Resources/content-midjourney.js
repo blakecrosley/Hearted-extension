@@ -1548,3 +1548,108 @@
   }).observe(document.body, { subtree: true, childList: true });
 
 })();
+
+// === Claude curation highlighter ===
+// Draws a green ring + rank chip on jobs Claude shortlisted (served by
+// localhost:8200 via background.js). Blake hearts them himself; clicking
+// the chip acknowledges "liked" back to the curation list. This block is
+// self-contained and touches nothing above.
+(function () {
+  'use strict';
+
+  let CURATION = new Map(); // job_id -> item
+  let hudEl = null;
+  let applyTimer = null;
+
+  const CSS = `
+    .claude-pick { outline: 3px solid #25D59D !important; outline-offset: -3px; border-radius: 8px; position: relative; }
+    .claude-pick-chip {
+      position: absolute; top: 6px; left: 6px; z-index: 9999;
+      background: #25D59D; color: #06130d; font: 700 11px/1.6 -apple-system, sans-serif;
+      padding: 1px 8px; border-radius: 999px; cursor: pointer; user-select: none;
+      box-shadow: 0 1px 4px rgba(0,0,0,.4);
+    }
+    .claude-pick-chip.done { background: #2a2a2a; color: #9be8cd; }
+    #claude-curation-hud {
+      position: fixed; bottom: 14px; left: 14px; z-index: 99999;
+      background: rgba(20,20,20,.92); color: #25D59D; font: 600 12px/1.8 -apple-system, sans-serif;
+      padding: 4px 12px; border-radius: 999px; border: 1.5px solid #25D59D; cursor: pointer;
+    }
+  `;
+
+  function injectCSS() {
+    if (document.getElementById('claude-curation-css')) return;
+    const s = document.createElement('style');
+    s.id = 'claude-curation-css';
+    s.textContent = CSS;
+    document.head.appendChild(s);
+  }
+
+  function pendingCount() {
+    let n = 0;
+    CURATION.forEach(i => { if (i.status === 'pending') n++; });
+    return n;
+  }
+
+  function updateHud() {
+    const n = pendingCount();
+    if (!n && !hudEl) return;
+    if (!hudEl) {
+      hudEl = document.createElement('div');
+      hudEl.id = 'claude-curation-hud';
+      hudEl.title = 'Claude picks on this account — click to refresh';
+      hudEl.addEventListener('click', fetchCuration);
+      document.body.appendChild(hudEl);
+    }
+    hudEl.textContent = n ? `Claude picks: ${n} to heart` : 'All picks hearted ✓';
+    if (!n) setTimeout(() => { hudEl?.remove(); hudEl = null; }, 6000);
+  }
+
+  function decorate(link, item) {
+    if (link.dataset.claudePick) return;
+    link.dataset.claudePick = '1';
+    link.classList.add('claude-pick');
+    const chip = document.createElement('span');
+    chip.className = 'claude-pick-chip' + (item.status === 'liked' ? ' done' : '');
+    chip.textContent = item.status === 'liked' ? '♥ done' : `#${item.rank} ${item.lift || 'pick'}`;
+    chip.title = (item.reason || '') + ' — heart it, then click this chip to check it off';
+    chip.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      browser.runtime.sendMessage({ action: 'markCuration', jobId: item.job_id, status: 'liked' }, () => {});
+      item.status = 'liked';
+      chip.classList.add('done');
+      chip.textContent = '♥ done';
+      updateHud();
+    });
+    link.appendChild(chip);
+  }
+
+  function applyHighlights() {
+    if (!CURATION.size) return;
+    injectCSS();
+    CURATION.forEach((item, jobId) => {
+      document.querySelectorAll(`a[href*="${jobId}"]`).forEach(link => decorate(link, item));
+    });
+    updateHud();
+  }
+
+  function scheduleApply() {
+    clearTimeout(applyTimer);
+    applyTimer = setTimeout(applyHighlights, 800);
+  }
+
+  function fetchCuration() {
+    try {
+      browser.runtime.sendMessage({ action: 'getCurationItems' }, (resp) => {
+        if (!resp || !resp.success) return;
+        CURATION = new Map();
+        (resp.data.items || []).forEach(i => CURATION.set(i.job_id, i));
+        applyHighlights();
+      });
+    } catch (e) { /* server not running — stay silent */ }
+  }
+
+  new MutationObserver(scheduleApply).observe(document.body, { childList: true, subtree: true });
+  setInterval(fetchCuration, 60000);
+  fetchCuration();
+})();
