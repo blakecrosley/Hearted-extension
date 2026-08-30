@@ -1654,15 +1654,17 @@
   fetchCuration();
 })();
 
-// === Harvest for Claude ===
-// One button: grabs every visible job card's image via the page's own
-// session and ships it to localhost:8200 → ~/Reps-Art/01-raw/harvest.
-// Reads only; nothing is clicked or written on MJ.
+// === Harvest for Claude (v2: continuous) ===
+// Toggle: auto-scrolls the archive and ships every job card's image via
+// the page's own session to localhost:8200 → ~/Reps-Art/01-raw/harvest.
+// Runs until clicked again or the page stops yielding new cards.
+// Reads only; nothing on MJ is clicked or written.
 (function () {
   'use strict';
 
-  let harvesting = false;
+  let running = false;
   const SENT = new Set();
+  let totalSent = 0, totalFail = 0;
 
   function toast(msg) {
     let t = document.getElementById('claude-harvest-toast');
@@ -1673,7 +1675,7 @@
       document.body.appendChild(t);
     }
     t.textContent = msg;
-    clearTimeout(t._h); t._h = setTimeout(() => t.remove(), 5000);
+    clearTimeout(t._h); t._h = setTimeout(() => t.remove(), 8000);
   }
 
   function jobCards() {
@@ -1688,6 +1690,16 @@
       if (!seen.has(m[1])) seen.set(m[1], { src, alt: img.alt || '' });
     });
     return seen;
+  }
+
+  function findScroller() {
+    const card = document.querySelector('a[href*="/jobs/"]');
+    let el = card;
+    while (el && el !== document.body) {
+      if (el.scrollHeight > el.clientHeight + 100 && ['auto', 'scroll'].includes(getComputedStyle(el).overflowY)) return el;
+      el = el.parentElement;
+    }
+    return document.scrollingElement || document.documentElement;
   }
 
   async function harvestOne(jobId, info) {
@@ -1709,23 +1721,35 @@
     });
   }
 
-  async function harvestVisible() {
-    if (harvesting) return;
-    harvesting = true;
-    const cards = jobCards();
-    const todo = [...cards.entries()].filter(([id]) => !SENT.has(id));
-    let ok = 0, fail = 0;
-    toast(`Harvesting ${todo.length} images for Claude…`);
+  async function harvestPass() {
+    const todo = [...jobCards().entries()].filter(([id]) => !SENT.has(id));
     for (const [id, info] of todo) {
+      if (!running) return 0;
       try {
-        if (await harvestOne(id, info)) { SENT.add(id); ok++; }
-        else fail++;
-      } catch (e) { fail++; }
-      toast(`Harvest: ${ok} sent${fail ? `, ${fail} failed` : ''} / ${todo.length}`);
-      await new Promise(r => setTimeout(r, 350));
+        if (await harvestOne(id, info)) { SENT.add(id); totalSent++; }
+        else totalFail++;
+      } catch (e) { totalFail++; }
+      toast(`Harvesting: ${totalSent} sent${totalFail ? `, ${totalFail} failed` : ''} — click button to stop`);
+      await new Promise(r => setTimeout(r, 300));
     }
-    toast(`Harvest done: ${ok} sent${fail ? `, ${fail} failed` : ''}`);
-    harvesting = false;
+    return todo.length;
+  }
+
+  async function harvestLoop(btn) {
+    const scroller = findScroller();
+    let dryPasses = 0;
+    while (running && dryPasses < 6) {
+      const got = await harvestPass();
+      if (!running) break;
+      scroller.scrollBy ? scroller.scrollBy(0, window.innerHeight * 0.85)
+                        : (scroller.scrollTop += window.innerHeight * 0.85);
+      await new Promise(r => setTimeout(r, 1300));
+      dryPasses = got === 0 ? dryPasses + 1 : 0;
+    }
+    running = false;
+    btn.textContent = '⇣ Harvest for Claude';
+    btn.style.background = '#141414';
+    toast(`Harvest ${dryPasses >= 6 ? 'reached the end' : 'stopped'}: ${totalSent} sent${totalFail ? `, ${totalFail} failed` : ''}`);
   }
 
   function addButton() {
@@ -1734,7 +1758,18 @@
     b.id = 'claude-harvest-btn';
     b.textContent = '⇣ Harvest for Claude';
     b.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:99999;background:#141414;color:#25D59D;font:700 12px/1.6 -apple-system,sans-serif;padding:6px 14px;border-radius:999px;border:1.5px solid #25D59D;cursor:pointer;';
-    b.addEventListener('click', harvestVisible);
+    b.addEventListener('click', () => {
+      if (running) {
+        running = false;
+        b.textContent = '⇣ Harvest for Claude';
+        b.style.background = '#141414';
+        return;
+      }
+      running = true;
+      b.textContent = '■ Harvesting… (click to stop)';
+      b.style.background = '#0d3527';
+      harvestLoop(b);
+    });
     document.body.appendChild(b);
   }
 
