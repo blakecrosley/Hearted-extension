@@ -1702,10 +1702,11 @@
     return document.scrollingElement || document.documentElement;
   }
 
-  async function harvestOne(jobId, info) {
-    const resp = await fetch(info.src);
-    if (!resp.ok) throw new Error(`fetch ${resp.status}`);
+  async function fetchAsB64(url) {
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
     const blob = await resp.blob();
+    if (!blob.type.startsWith('image/') || blob.size < 2000) return null;
     const ext = (blob.type.split('/')[1] || 'webp').replace('jpeg', 'jpg');
     const b64 = await new Promise((res, rej) => {
       const r = new FileReader();
@@ -1713,12 +1714,36 @@
       r.onerror = rej;
       r.readAsDataURL(blob);
     });
+    return { b64, ext };
+  }
+
+  function ship(jobId, idx, img, info) {
     return new Promise((resolve) => {
       browser.runtime.sendMessage({
         action: 'harvestImage',
-        payload: { job_id: jobId, image_base64: b64, ext, prompt: info.alt, page: location.pathname }
+        payload: { job_id: jobId, image_base64: img.b64, ext: img.ext, idx,
+                   prompt: info.alt, page: location.pathname }
       }, (r) => resolve(r && r.success));
     });
+  }
+
+  // Full-res first: construct variant URLs from the job id (the page's
+  // session authorizes the CDN). Falls back to the grid thumbnail.
+  async function harvestOne(jobId, info) {
+    let shipped = 0;
+    for (let idx = 0; idx < 4; idx++) {
+      let img = await fetchAsB64(`https://cdn.midjourney.com/${jobId}/0_${idx}.webp`);
+      if (!img) img = await fetchAsB64(`https://cdn.midjourney.com/${jobId}/0_${idx}.png`);
+      if (!img) break; // single-image jobs stop at the first missing variant
+      if (await ship(jobId, idx, img, info)) shipped++;
+      await new Promise(r => setTimeout(r, 150));
+    }
+    if (shipped === 0) {
+      const img = await fetchAsB64(info.src);
+      if (img && await ship(jobId, 0, img, info)) shipped = 1;
+    }
+    if (shipped === 0) throw new Error('no variants fetched');
+    return true;
   }
 
   async function harvestPass() {
