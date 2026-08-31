@@ -619,3 +619,68 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 });
+
+
+// === Like-run sequencer (v6) ===
+// Content-script loops die when their tab is backgrounded (Safari timer
+// throttling). The background script runs the whole sequence instead:
+// open walker tab -> wait for it to close itself (ack or recon) -> next.
+let likeRun = { running: false, total: 0, opened: 0, startedAt: 0 };
+
+function waitForTabClose(tabId, timeoutMs) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; cleanup(); resolve(); } };
+    const onRemoved = (closedId) => { if (closedId === tabId) finish(); };
+    const timer = setTimeout(() => {
+      browser.tabs.remove(tabId).catch(() => {});
+      finish();
+    }, timeoutMs);
+    function cleanup() {
+      clearTimeout(timer);
+      browser.tabs.onRemoved.removeListener(onRemoved);
+    }
+    browser.tabs.onRemoved.addListener(onRemoved);
+  });
+}
+
+async function runLikeSequence() {
+  if (likeRun.running) return;
+  likeRun.running = true;
+  likeRun.startedAt = Date.now();
+  try {
+    const resp = await fetch('http://localhost:8200/api/curation?status=pending');
+    const data = await resp.json();
+    const items = data.items || [];
+    likeRun.total = items.length;
+    likeRun.opened = 0;
+    for (const item of items) {
+      if (!likeRun.running) break;
+      const tab = await browser.tabs.create({
+        url: `https://www.midjourney.com/jobs/${item.job_id}#claude-like`,
+        active: true
+      });
+      likeRun.opened++;
+      await waitForTabClose(tab.id, 30000);
+      await new Promise(r => setTimeout(r, 2500 + Math.random() * 2000));
+    }
+  } catch (e) { /* server unreachable etc. */ }
+  likeRun.running = false;
+}
+
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'startLikeRun') {
+    runLikeSequence();
+    sendResponse({ success: true });
+    return true;
+  }
+  if (message.action === 'stopLikeRun') {
+    likeRun.running = false;
+    sendResponse({ success: true });
+    return true;
+  }
+  if (message.action === 'likeRunStatus') {
+    sendResponse({ success: true, data: likeRun });
+    return true;
+  }
+});

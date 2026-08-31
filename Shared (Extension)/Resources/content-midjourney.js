@@ -1856,50 +1856,40 @@
 })();
 
 
-// === Auto-liker (v4: detail-tab only, verified) ===
-// Grid clicking produced false positives (clicked near-card controls,
-// counted likes MJ never registered). Every pick now goes through its
-// own /jobs/ page where the real like button exists and the result is
-// VERIFIED before counting.
+// === Auto-liker (v6: background-sequenced) ===
+// The button only starts/stops the run; the background script drives it
+// (content-script timers die when the tab is backgrounded). Progress
+// polled from the sequencer + the server.
 (function () {
   'use strict';
 
-  let liking = false;
-
-  function pickItems() {
+  function send(action) {
     return new Promise((resolve) => {
-      try {
-        browser.runtime.sendMessage({ action: 'getCurationItems' }, (r) => {
-          resolve(r && r.success ? (r.data.items || []) : []);
-        });
-      } catch (e) { resolve([]); }
+      try { browser.runtime.sendMessage({ action }, (r) => resolve(r)); }
+      catch (e) { resolve(null); }
     });
   }
 
-  const wait = (ms) => new Promise(r => setTimeout(r, ms));
-
-  async function likeAll(btn) {
-    const items = (await pickItems()).filter(i => i.status === 'pending');
-    let opened = 0;
-    for (const item of items) {
-      if (!liking) break;
-      await new Promise((resolve) => {
-        browser.runtime.sendMessage({
-          action: 'openJobTab',
-          url: `https://www.midjourney.com/jobs/${item.job_id}#claude-like`
-        }, () => resolve());
-      });
-      opened++;
-      btn.textContent = `\u2665 liking via tabs\u2026 ${opened}/${items.length} (click to stop)`;
-      await wait(9000 + Math.random() * 3000);
+  async function refreshLabel(b) {
+    const st = await send('likeRunStatus');
+    const run = st && st.data;
+    if (run && run.running) {
+      b.textContent = `\u2665 liking ${run.opened}/${run.total}\u2026 (click to stop)`;
+      b.dataset.running = '1';
+    } else {
+      if (b.dataset.running === '1') {
+        b.dataset.running = '';
+        const items = await new Promise((resolve) => {
+          browser.runtime.sendMessage({ action: 'getCurationItems' }, (r) =>
+            resolve(r && r.success ? (r.data.items || []) : []));
+        });
+        // getCurationItems returns pending only; fewer pending = progress
+        b.textContent = `\u2665 run done \u00b7 ${items.length} still pending`;
+        setTimeout(() => { b.textContent = '\u2665 Like picks in MJ'; }, 15000);
+      } else if (!b.dataset.running) {
+        if (b.textContent.startsWith('\u2665 liking')) b.textContent = '\u2665 Like picks in MJ';
+      }
     }
-    await wait(4000);
-    const after = await pickItems();
-    const done = after.filter(i => i.status === 'liked').length;
-    const left = after.filter(i => i.status === 'pending').length;
-    liking = false;
-    btn.textContent = `\u2665 verified: ${done} liked \u00b7 ${left} pending`;
-    setTimeout(() => { btn.textContent = '\u2665 Like picks in MJ'; }, 20000);
   }
 
   function addLikeButton() {
@@ -1908,13 +1898,14 @@
     b.id = 'claude-like-btn';
     b.textContent = '\u2665 Like picks in MJ';
     b.style.cssText = 'position:fixed;bottom:14px;right:190px;z-index:99999;background:#141414;color:#E8E6DB;font:700 12px/1.6 -apple-system,sans-serif;padding:6px 14px;border-radius:999px;border:1.5px solid #E8E6DB;cursor:pointer;';
-    b.addEventListener('click', () => {
-      if (liking) { liking = false; b.textContent = '\u2665 Like picks in MJ'; return; }
-      liking = true;
+    b.addEventListener('click', async () => {
+      const st = await send('likeRunStatus');
+      if (st && st.data && st.data.running) { await send('stopLikeRun'); b.textContent = '\u2665 Like picks in MJ'; return; }
       b.textContent = '\u2665 starting\u2026';
-      likeAll(b);
+      await send('startLikeRun');
     });
     document.body.appendChild(b);
+    setInterval(() => refreshLabel(b), 3000);
   }
 
   addLikeButton();
