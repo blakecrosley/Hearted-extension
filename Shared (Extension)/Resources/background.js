@@ -158,6 +158,8 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
+
+  return true; // keep port open for other listeners (WebKit quirk)
 });
 
 // DOM capture: POST to local resumegeni dev endpoint.
@@ -518,10 +520,12 @@ browser.commands?.onCommand?.addListener((command) => {
   }
 });
 
-// === Claude curation (localhost:8200) ===
-// Claude pushes a shortlist of job IDs; content-midjourney.js highlights
-// them so Blake can heart the winners himself. Reads/acks only — the
-// extension never clicks hearts.
+
+// ============================================================
+// Claude pipeline (curation / harvest / walker) — consolidated.
+// ONE listener, returns true for every message so WebKit never
+// closes another listener's async response port.
+// ============================================================
 const CURATION_BASE = 'http://localhost:8200/api/curation';
 
 async function getCurationItems() {
@@ -545,25 +549,8 @@ async function markCuration(jobId, status) {
   return response.json();
 }
 
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'getCurationItems') {
-    getCurationItems()
-      .then(result => sendResponse({ success: true, data: result }))
-      .catch(error => sendResponse({ success: false, error: error.message }));
-    return true;
-  }
-  if (message.action === 'markCuration') {
-    markCuration(message.jobId, message.status || 'liked')
-      .then(result => sendResponse({ success: true, data: result }))
-      .catch(error => sendResponse({ success: false, error: error.message }));
-    return true;
-  }
-});
-
-// Harvest: ship an image (fetched in-page with Blake's session) to the
-// local art pipeline so Claude can judge it.
 async function harvestImage(payload) {
-  const response = await fetch('http://localhost:8200/api/curation/harvest', {
+  const response = await fetch(`${CURATION_BASE}/harvest`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -572,73 +559,22 @@ async function harvestImage(payload) {
   return response.json();
 }
 
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'harvestImage') {
-    harvestImage(message.payload)
-      .then(result => sendResponse({ success: true, data: result }))
-      .catch(error => sendResponse({ success: false, error: error.message }));
-    return true;
-  }
-});
-
-// Harvest stats for the on-page HUD check.
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'getHarvestStats') {
-    fetch('http://localhost:8200/api/curation/harvest/stats')
-      .then(r => r.json())
-      .then(data => sendResponse({ success: true, data }))
-      .catch(error => sendResponse({ success: false, error: error.message }));
-    return true;
-  }
-});
-
-// Recon channel for the auto-liker.
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'curationDebug') {
-    fetch('http://localhost:8200/api/curation/debug', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(message.payload)
-    }).then(r => r.json())
-      .then(data => sendResponse({ success: true, data }))
-      .catch(error => sendResponse({ success: false, error: error.message }));
-    return true;
-  }
-});
-
-// Walker tabs for detail-view liking (grid tiles carry no like control).
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'openJobTab') {
-    browser.tabs.create({ url: message.url, active: true })
-      .then(tab => sendResponse({ success: true, tabId: tab.id }))
-      .catch(error => sendResponse({ success: false, error: error.message }));
-    return true;
-  }
-  if (message.action === 'closeThisTab') {
-    if (sender.tab && sender.tab.id != null) browser.tabs.remove(sender.tab.id);
-    sendResponse({ success: true });
-    return true;
-  }
-});
-
-
-// === Like-run sequencer (v6) ===
-// Content-script loops die when their tab is backgrounded (Safari timer
-// throttling). The background script runs the whole sequence instead:
-// open walker tab -> wait for it to close itself (ack or recon) -> next.
 let likeRun = { running: false, total: 0, opened: 0, startedAt: 0 };
 
 function waitForTabClose(tabId, timeoutMs) {
   return new Promise((resolve) => {
     let done = false;
-    const finish = () => { if (!done) { done = true; cleanup(); resolve(); } };
     const onRemoved = (closedId) => { if (closedId === tabId) finish(); };
     const timer = setTimeout(() => {
       browser.tabs.remove(tabId).catch(() => {});
       finish();
     }, timeoutMs);
-    function cleanup() {
+    function finish() {
+      if (done) return;
+      done = true;
       clearTimeout(timer);
       browser.tabs.onRemoved.removeListener(onRemoved);
+      resolve();
     }
     browser.tabs.onRemoved.addListener(onRemoved);
   });
@@ -649,8 +585,7 @@ async function runLikeSequence() {
   likeRun.running = true;
   likeRun.startedAt = Date.now();
   try {
-    const resp = await fetch('http://localhost:8200/api/curation?status=pending');
-    const data = await resp.json();
+    const data = await getCurationItems();
     const items = data.items || [];
     likeRun.total = items.length;
     likeRun.opened = 0;
@@ -664,23 +599,34 @@ async function runLikeSequence() {
       await waitForTabClose(tab.id, 30000);
       await new Promise(r => setTimeout(r, 2500 + Math.random() * 2000));
     }
-  } catch (e) { /* server unreachable etc. */ }
+  } catch (e) { /* server unreachable */ }
   likeRun.running = false;
 }
 
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'startLikeRun') {
-    runLikeSequence();
-    sendResponse({ success: true });
-    return true;
+  const respond = (promise) => promise
+    .then(result => sendResponse({ success: true, data: result }))
+    .catch(error => sendResponse({ success: false, error: error.message }));
+  switch (message.action) {
+    case 'getCurationItems': respond(getCurationItems()); break;
+    case 'markCuration': respond(markCuration(message.jobId, message.status || 'liked')); break;
+    case 'harvestImage': respond(harvestImage(message.payload)); break;
+    case 'getHarvestStats':
+      respond(fetch(`${CURATION_BASE}/harvest/stats`).then(r => r.json())); break;
+    case 'curationDebug':
+      respond(fetch(`${CURATION_BASE}/debug`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(message.payload)
+      }).then(r => r.json())); break;
+    case 'openJobTab':
+      respond(browser.tabs.create({ url: message.url, active: true }).then(t => ({ tabId: t.id }))); break;
+    case 'closeThisTab':
+      if (sender.tab && sender.tab.id != null) browser.tabs.remove(sender.tab.id);
+      sendResponse({ success: true });
+      break;
+    case 'startLikeRun': runLikeSequence(); sendResponse({ success: true }); break;
+    case 'stopLikeRun': likeRun.running = false; sendResponse({ success: true }); break;
+    case 'likeRunStatus': sendResponse({ success: true, data: likeRun }); break;
   }
-  if (message.action === 'stopLikeRun') {
-    likeRun.running = false;
-    sendResponse({ success: true });
-    return true;
-  }
-  if (message.action === 'likeRunStatus') {
-    sendResponse({ success: true, data: likeRun });
-    return true;
-  }
+  return true;
 });
