@@ -1891,7 +1891,7 @@
       });
       opened++;
       btn.textContent = `\u2665 liking via tabs\u2026 ${opened}/${items.length} (click to stop)`;
-      await wait(5000 + Math.random() * 3000);
+      await wait(9000 + Math.random() * 3000);
     }
     await wait(4000);
     const after = await pickItems();
@@ -1953,16 +1953,20 @@
     if (ctl) {
       clearInterval(t);
       if (!ctl.already) ctl.el.click();
-      // VERIFY: only ack when the control now reads Unlike/Liked.
+      // VERIFY: only ack when the control reads Unlike/Liked, and only
+      // after a settle window — the UI flips optimistically but the
+      // mutation persists over the websocket, which needs the tab alive
+      // (and frontmost in Safari) to flush.
       let checks = 0;
       const v = setInterval(() => {
         checks++;
+        if (checks < 9) return; // ~6s settle before first verdict
         if (verifyLiked()) {
           clearInterval(v);
           browser.runtime.sendMessage({ action: 'markCuration', jobId, status: 'liked' }, () => {
             browser.runtime.sendMessage({ action: 'closeThisTab' }, () => {});
           });
-        } else if (checks > 8) {
+        } else if (checks > 16) {
           clearInterval(v);
           browser.runtime.sendMessage({
             action: 'curationDebug',

@@ -608,7 +608,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Walker tabs for detail-view liking (grid tiles carry no like control).
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'openJobTab') {
-    browser.tabs.create({ url: message.url, active: false })
+    browser.tabs.create({ url: message.url, active: true })
       .then(tab => sendResponse({ success: true, tabId: tab.id }))
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
