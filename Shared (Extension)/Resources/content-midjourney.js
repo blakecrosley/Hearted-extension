@@ -1971,9 +1971,22 @@
       await wait(1500);
       dry = (counters.liked + counters.already) === before ? dry + 1 : 0;
     }
+    // Grid tiles carry no like control — finish the stragglers in
+    // background detail tabs, where a real like button exists.
+    const stragglers = items.filter(i => !i._done);
+    for (const item of stragglers) {
+      if (!liking && stragglers.length) break;
+      await new Promise((resolve) => {
+        browser.runtime.sendMessage({
+          action: 'openJobTab',
+          url: `https://www.midjourney.com/jobs/${item.job_id}#claude-like`
+        }, () => resolve());
+      });
+      btn.textContent = `♥ finishing in tabs… (${stragglers.indexOf(item) + 1}/${stragglers.length})`;
+      await wait(4500 + Math.random() * 2500);
+    }
     liking = false;
-    const left = items.filter(i => !i._done).length;
-    btn.textContent = `♥ done: ${counters.liked} liked · ${counters.already} were · ${left} not found`;
+    btn.textContent = `♥ done: ${counters.liked} here · ${stragglers.length} via tabs · ${counters.already} were`;
     setTimeout(() => { btn.textContent = '♥ Like picks in MJ'; }, 15000);
   }
 
@@ -1994,4 +2007,49 @@
 
   addLikeButton();
   setInterval(addLikeButton, 5000);
+})();
+
+
+// === Detail-page walker ===
+// A background tab opened by the auto-liker (#claude-like) likes THIS
+// job via the detail view's real like control, acks, and closes itself.
+(function () {
+  'use strict';
+  if (!location.hash.includes('claude-like')) return;
+  const m = location.pathname.match(/jobs\/([0-9a-f-]{36})/);
+  if (!m) return;
+  const jobId = m[1];
+
+  function findLike() {
+    const els = document.querySelectorAll('button, [role="button"], [aria-label], [title]');
+    for (const el of els) {
+      const label = ((el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.textContent || '')).trim().toLowerCase();
+      if (/unlike|liked/.test(label)) return { el, already: true };
+      if (/\blike\b|heart|favorite|rate/.test(label) && label.length < 40) return { el, already: false };
+    }
+    return null;
+  }
+
+  let tries = 0;
+  const t = setInterval(() => {
+    tries++;
+    const ctl = findLike();
+    if (ctl) {
+      clearInterval(t);
+      if (!ctl.already) ctl.el.click();
+      setTimeout(() => {
+        browser.runtime.sendMessage({ action: 'markCuration', jobId, status: 'liked' }, () => {
+          browser.runtime.sendMessage({ action: 'closeThisTab' }, () => {});
+        });
+      }, 900);
+    } else if (tries > 24) {
+      clearInterval(t);
+      browser.runtime.sendMessage({
+        action: 'curationDebug',
+        payload: { kind: 'detail-nolike', job_id: jobId, html: document.body.innerHTML.slice(0, 18000) }
+      }, () => {
+        browser.runtime.sendMessage({ action: 'closeThisTab' }, () => {});
+      });
+    }
+  }, 500);
 })();

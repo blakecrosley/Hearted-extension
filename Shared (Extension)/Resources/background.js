@@ -604,3 +604,18 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 });
+
+// Walker tabs for detail-view liking (grid tiles carry no like control).
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'openJobTab') {
+    browser.tabs.create({ url: message.url, active: false })
+      .then(tab => sendResponse({ success: true, tabId: tab.id }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+  if (message.action === 'closeThisTab') {
+    if (sender.tab && sender.tab.id != null) browser.tabs.remove(sender.tab.id);
+    sendResponse({ success: true });
+    return true;
+  }
+});
