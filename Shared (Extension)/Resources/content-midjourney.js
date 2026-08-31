@@ -1856,7 +1856,11 @@
 })();
 
 
-// === Auto-liker (v2: wide match + scroll sweep + full recon) ===
+// === Auto-liker (v4: detail-tab only, verified) ===
+// Grid clicking produced false positives (clicked near-card controls,
+// counted likes MJ never registered). Every pick now goes through its
+// own /jobs/ page where the real like button exists and the result is
+// VERIFIED before counting.
 (function () {
   'use strict';
 
@@ -1872,134 +1876,42 @@
     });
   }
 
-  // Any element that smells like a like control, buttons or not; click
-  // its nearest clickable ancestor. Excludes our own UI.
-  function likeControlNear(card) {
-    const scopes = [card, card.parentElement, card.parentElement?.parentElement].filter(Boolean);
-    for (const scope of scopes) {
-      const els = scope.querySelectorAll('[aria-label], [title], [data-tooltip], button, [role="button"]');
-      for (const el of els) {
-        if (el.id && el.id.startsWith('claude-')) continue;
-        if (el.id === 'ScrollToTop' || el.closest('#ScrollToTop')) continue;
-        const label = ((el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.getAttribute('data-tooltip') || '')).trim().toLowerCase();
-        if (!label) continue;
-        if (/unlike|liked/.test(label)) return { el: clickable(el), already: true };
-        if (/\blike\b|heart|favorite|favourite|rate/.test(label)) return { el: clickable(el), already: false };
-      }
-      // last resort: svg hearts by path signature inside hover overlays
-      for (const svg of scope.querySelectorAll('svg')) {
-        if (svg.closest('#ScrollToTop') || (svg.closest('[id^="claude-"]'))) continue;
-        const d = (svg.querySelector('path')?.getAttribute('d') || '');
-        if (/^M\s*11\.?9|^M\s*12\s|^M20\.8|^M\s*20\.4/.test(d) && d.length > 60 && /c|C/.test(d)) {
-          const host = clickable(svg);
-          if (host) return { el: host, already: false };
-        }
-      }
-    }
-    return null;
-  }
-
-  function clickable(el) {
-    let n = el;
-    for (let i = 0; n && i < 5; i++) {
-      const cs = getComputedStyle(n);
-      if (n.tagName === 'BUTTON' || n.getAttribute('role') === 'button' || cs.cursor === 'pointer') return n;
-      n = n.parentElement;
-    }
-    return el;
-  }
-
-  async function reconShip(jobId, card) {
-    const scope = card.parentElement?.parentElement || card.parentElement || card;
-    return new Promise((resolve) => {
-      browser.runtime.sendMessage({
-        action: 'curationDebug',
-        payload: { kind: 'card-full', job_id: jobId, html: scope.outerHTML.slice(0, 18000) }
-      }, () => resolve());
-    });
-  }
-
-  function hover(el) {
-    ['pointerenter', 'pointerover', 'mouseenter', 'mouseover', 'mousemove'].forEach(t =>
-      el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window })));
-  }
-
   const wait = (ms) => new Promise(r => setTimeout(r, ms));
-  const jitter = () => 2500 + Math.random() * 3500;
-
-  async function likeVisible(pending, counters, btn) {
-    for (const item of pending) {
-      if (!liking) return;
-      if (item._done) continue;
-      const a = document.querySelector(`a[href*="${item.job_id}"]`);
-      if (!a) continue;
-      a.scrollIntoView({ block: 'center' });
-      await wait(500);
-      hover(a);
-      const overlayHost = a.parentElement || a;
-      hover(overlayHost);
-      await wait(450);
-      const ctl = likeControlNear(a);
-      if (!ctl) {
-        if (!item._reconned) { item._reconned = true; await reconShip(item.job_id, a); counters.nobtn++; }
-        continue;
-      }
-      if (!ctl.already) { ctl.el.click(); await wait(350); }
-      item._done = true;
-      counters[ctl.already ? 'already' : 'liked']++;
-      await new Promise((resolve) => {
-        browser.runtime.sendMessage({ action: 'markCuration', jobId: item.job_id, status: 'liked' }, () => resolve());
-      });
-      btn.textContent = `♥ ${counters.liked} liked · ${counters.already} were · ${counters.nobtn} ?  (click to stop)`;
-      await wait(jitter());
-    }
-  }
 
   async function likeAll(btn) {
     const items = (await pickItems()).filter(i => i.status === 'pending');
-    const counters = { liked: 0, already: 0, nobtn: 0 };
-    let dry = 0;
-    const scroller = document.scrollingElement || document.documentElement;
-    while (liking && dry < 8 && items.some(i => !i._done)) {
-      const before = counters.liked + counters.already;
-      await likeVisible(items, counters, btn);
+    let opened = 0;
+    for (const item of items) {
       if (!liking) break;
-      const remaining = items.some(i => !i._done);
-      if (!remaining) break;
-      window.scrollBy(0, Math.round(window.innerHeight * 0.85));
-      scroller.scrollTop += Math.round(window.innerHeight * 0.85);
-      await wait(1500);
-      dry = (counters.liked + counters.already) === before ? dry + 1 : 0;
-    }
-    // Grid tiles carry no like control — finish the stragglers in
-    // background detail tabs, where a real like button exists.
-    const stragglers = items.filter(i => !i._done);
-    for (const item of stragglers) {
-      if (!liking && stragglers.length) break;
       await new Promise((resolve) => {
         browser.runtime.sendMessage({
           action: 'openJobTab',
           url: `https://www.midjourney.com/jobs/${item.job_id}#claude-like`
         }, () => resolve());
       });
-      btn.textContent = `♥ finishing in tabs… (${stragglers.indexOf(item) + 1}/${stragglers.length})`;
-      await wait(4500 + Math.random() * 2500);
+      opened++;
+      btn.textContent = `\u2665 liking via tabs\u2026 ${opened}/${items.length} (click to stop)`;
+      await wait(5000 + Math.random() * 3000);
     }
+    await wait(4000);
+    const after = await pickItems();
+    const done = after.filter(i => i.status === 'liked').length;
+    const left = after.filter(i => i.status === 'pending').length;
     liking = false;
-    btn.textContent = `♥ done: ${counters.liked} here · ${stragglers.length} via tabs · ${counters.already} were`;
-    setTimeout(() => { btn.textContent = '♥ Like picks in MJ'; }, 15000);
+    btn.textContent = `\u2665 verified: ${done} liked \u00b7 ${left} pending`;
+    setTimeout(() => { btn.textContent = '\u2665 Like picks in MJ'; }, 20000);
   }
 
   function addLikeButton() {
     if (document.getElementById('claude-like-btn')) return;
     const b = document.createElement('button');
     b.id = 'claude-like-btn';
-    b.textContent = '♥ Like picks in MJ';
+    b.textContent = '\u2665 Like picks in MJ';
     b.style.cssText = 'position:fixed;bottom:14px;right:190px;z-index:99999;background:#141414;color:#E8E6DB;font:700 12px/1.6 -apple-system,sans-serif;padding:6px 14px;border-radius:999px;border:1.5px solid #E8E6DB;cursor:pointer;';
     b.addEventListener('click', () => {
-      if (liking) { liking = false; b.textContent = '♥ Like picks in MJ'; return; }
+      if (liking) { liking = false; b.textContent = '\u2665 Like picks in MJ'; return; }
       liking = true;
-      b.textContent = '♥ starting…';
+      b.textContent = '\u2665 starting\u2026';
       likeAll(b);
     });
     document.body.appendChild(b);
@@ -2008,7 +1920,6 @@
   addLikeButton();
   setInterval(addLikeButton, 5000);
 })();
-
 
 // === Detail-page walker ===
 // A background tab opened by the auto-liker (#claude-like) likes THIS
@@ -2030,6 +1941,11 @@
     return null;
   }
 
+  function verifyLiked() {
+    const ctl = findLike();
+    return ctl && ctl.already;
+  }
+
   let tries = 0;
   const t = setInterval(() => {
     tries++;
@@ -2037,11 +1953,25 @@
     if (ctl) {
       clearInterval(t);
       if (!ctl.already) ctl.el.click();
-      setTimeout(() => {
-        browser.runtime.sendMessage({ action: 'markCuration', jobId, status: 'liked' }, () => {
-          browser.runtime.sendMessage({ action: 'closeThisTab' }, () => {});
-        });
-      }, 900);
+      // VERIFY: only ack when the control now reads Unlike/Liked.
+      let checks = 0;
+      const v = setInterval(() => {
+        checks++;
+        if (verifyLiked()) {
+          clearInterval(v);
+          browser.runtime.sendMessage({ action: 'markCuration', jobId, status: 'liked' }, () => {
+            browser.runtime.sendMessage({ action: 'closeThisTab' }, () => {});
+          });
+        } else if (checks > 8) {
+          clearInterval(v);
+          browser.runtime.sendMessage({
+            action: 'curationDebug',
+            payload: { kind: 'noverify', job_id: jobId, html: (document.querySelector('main') || document.body).innerHTML.slice(0, 15000) }
+          }, () => {
+            browser.runtime.sendMessage({ action: 'closeThisTab' }, () => {});
+          });
+        }
+      }, 700);
     } else if (tries > 24) {
       clearInterval(t);
       browser.runtime.sendMessage({
