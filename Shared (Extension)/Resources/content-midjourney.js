@@ -1854,3 +1854,121 @@
     btnTimer = setTimeout(addButton, 1200);
   }).observe(document.body, { childList: true, subtree: true });
 })();
+
+
+// === Auto-liker ===
+// Blake's call (2026-08-31): like the picks ON MJ for him. Walks the
+// curation list, hovers each picked card, clicks MJ's own like control
+// with human pacing, skips already-liked, acks each to the server. If a
+// like button can't be found, ships that card's control markup to the
+// recon endpoint so selectors get fixed from real DOM.
+(function () {
+  'use strict';
+
+  let liking = false;
+
+  function pickIds() {
+    return new Promise((resolve) => {
+      try {
+        browser.runtime.sendMessage({ action: 'getCurationItems' }, (r) => {
+          resolve(r && r.success ? (r.data.items || []) : []);
+        });
+      } catch (e) { resolve([]); }
+    });
+  }
+
+  function cardFor(jobId) {
+    const a = document.querySelector(`a[href*="${jobId}"]`);
+    return a || null;
+  }
+
+  function likeControlNear(card) {
+    const scopes = [card, card.parentElement, card.parentElement?.parentElement].filter(Boolean);
+    for (const scope of scopes) {
+      const els = scope.querySelectorAll('button, [role="button"]');
+      for (const el of els) {
+        const label = ((el.getAttribute('aria-label') || '') + ' ' + (el.title || '') + ' ' + (el.textContent || '')).trim().toLowerCase();
+        if (/unlike|liked/.test(label)) return { el, already: true };
+        if (/\blike\b|heart|favorite|favourite/.test(label)) return { el, already: false };
+      }
+    }
+    return null;
+  }
+
+  async function reconShip(jobId, card) {
+    const scope = card.parentElement?.parentElement || card;
+    const buttons = [...scope.querySelectorAll('button, [role="button"], svg')].slice(0, 12)
+      .map(el => el.outerHTML.slice(0, 600)).join('\n\n');
+    return new Promise((resolve) => {
+      browser.runtime.sendMessage({
+        action: 'curationDebug',
+        payload: { kind: 'likebtn', job_id: jobId, html: buttons || scope.outerHTML.slice(0, 4000) }
+      }, () => resolve());
+    });
+  }
+
+  function hover(el) {
+    ['pointerover', 'mouseover', 'mouseenter'].forEach(t =>
+      el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true })));
+  }
+
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  const jitter = () => 2500 + Math.random() * 3500;
+
+  async function likeOne(item) {
+    const card = cardFor(item.job_id);
+    if (!card) return 'notfound';
+    card.scrollIntoView({ block: 'center' });
+    await wait(500);
+    hover(card);
+    await wait(400);
+    const ctl = likeControlNear(card);
+    if (!ctl) { await reconShip(item.job_id, card); return 'nobutton'; }
+    if (!ctl.already) {
+      ctl.el.click();
+      await wait(300);
+    }
+    await new Promise((resolve) => {
+      browser.runtime.sendMessage({ action: 'markCuration', jobId: item.job_id, status: 'liked' }, () => resolve());
+    });
+    return ctl.already ? 'already' : 'liked';
+  }
+
+  async function likeAll(btn) {
+    const items = (await pickIds()).filter(i => i.status === 'pending');
+    let liked = 0, already = 0, missing = 0, nobtn = 0;
+    for (const item of items) {
+      if (!liking) break;
+      const res = await likeOne(item);
+      if (res === 'liked') liked++;
+      else if (res === 'already') already++;
+      else if (res === 'nobutton') nobtn++;
+      else missing++;
+      btn.textContent = `♥ ${liked} liked · ${missing + nobtn} skipped (click to stop)`;
+      await wait(jitter());
+    }
+    liking = false;
+    btn.textContent = `♥ done: ${liked} liked · ${already} already · ${missing} off-page · ${nobtn} no-button`;
+    setTimeout(() => { btn.textContent = likeLabel(); }, 12000);
+  }
+
+  function likeLabel() { return '♥ Like picks in MJ'; }
+
+  function addLikeButton() {
+    if (document.getElementById('claude-like-btn')) return;
+    const b = document.createElement('button');
+    b.id = 'claude-like-btn';
+    b.textContent = likeLabel();
+    b.style.cssText = 'position:fixed;bottom:14px;right:190px;z-index:99999;background:#141414;color:#E8E6DB;font:700 12px/1.6 -apple-system,sans-serif;padding:6px 14px;border-radius:999px;border:1.5px solid #E8E6DB;cursor:pointer;';
+    b.addEventListener('click', () => {
+      if (liking) { liking = false; b.textContent = likeLabel(); return; }
+      liking = true;
+      b.textContent = '♥ liking…';
+      likeAll(b);
+    });
+    document.body.appendChild(b);
+  }
+
+  addLikeButton();
+  setInterval(addLikeButton, 5000);
+})();

@@ -591,3 +591,16 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 });
+
+// Recon channel for the auto-liker.
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'curationDebug') {
+    fetch('http://localhost:8200/api/curation/debug', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(message.payload)
+    }).then(r => r.json())
+      .then(data => sendResponse({ success: true, data }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+});
