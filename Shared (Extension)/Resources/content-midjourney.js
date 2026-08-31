@@ -1856,18 +1856,13 @@
 })();
 
 
-// === Auto-liker ===
-// Blake's call (2026-08-31): like the picks ON MJ for him. Walks the
-// curation list, hovers each picked card, clicks MJ's own like control
-// with human pacing, skips already-liked, acks each to the server. If a
-// like button can't be found, ships that card's control markup to the
-// recon endpoint so selectors get fixed from real DOM.
+// === Auto-liker (v2: wide match + scroll sweep + full recon) ===
 (function () {
   'use strict';
 
   let liking = false;
 
-  function pickIds() {
+  function pickItems() {
     return new Promise((resolve) => {
       try {
         browser.runtime.sendMessage({ action: 'getCurationItems' }, (r) => {
@@ -1877,93 +1872,121 @@
     });
   }
 
-  function cardFor(jobId) {
-    const a = document.querySelector(`a[href*="${jobId}"]`);
-    return a || null;
-  }
-
+  // Any element that smells like a like control, buttons or not; click
+  // its nearest clickable ancestor. Excludes our own UI.
   function likeControlNear(card) {
     const scopes = [card, card.parentElement, card.parentElement?.parentElement].filter(Boolean);
     for (const scope of scopes) {
-      const els = scope.querySelectorAll('button, [role="button"]');
+      const els = scope.querySelectorAll('[aria-label], [title], [data-tooltip], button, [role="button"]');
       for (const el of els) {
-        const label = ((el.getAttribute('aria-label') || '') + ' ' + (el.title || '') + ' ' + (el.textContent || '')).trim().toLowerCase();
-        if (/unlike|liked/.test(label)) return { el, already: true };
-        if (/\blike\b|heart|favorite|favourite/.test(label)) return { el, already: false };
+        if (el.id && el.id.startsWith('claude-')) continue;
+        if (el.id === 'ScrollToTop' || el.closest('#ScrollToTop')) continue;
+        const label = ((el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.getAttribute('data-tooltip') || '')).trim().toLowerCase();
+        if (!label) continue;
+        if (/unlike|liked/.test(label)) return { el: clickable(el), already: true };
+        if (/\blike\b|heart|favorite|favourite|rate/.test(label)) return { el: clickable(el), already: false };
+      }
+      // last resort: svg hearts by path signature inside hover overlays
+      for (const svg of scope.querySelectorAll('svg')) {
+        if (svg.closest('#ScrollToTop') || (svg.closest('[id^="claude-"]'))) continue;
+        const d = (svg.querySelector('path')?.getAttribute('d') || '');
+        if (/^M\s*11\.?9|^M\s*12\s|^M20\.8|^M\s*20\.4/.test(d) && d.length > 60 && /c|C/.test(d)) {
+          const host = clickable(svg);
+          if (host) return { el: host, already: false };
+        }
       }
     }
     return null;
   }
 
+  function clickable(el) {
+    let n = el;
+    for (let i = 0; n && i < 5; i++) {
+      const cs = getComputedStyle(n);
+      if (n.tagName === 'BUTTON' || n.getAttribute('role') === 'button' || cs.cursor === 'pointer') return n;
+      n = n.parentElement;
+    }
+    return el;
+  }
+
   async function reconShip(jobId, card) {
-    const scope = card.parentElement?.parentElement || card;
-    const buttons = [...scope.querySelectorAll('button, [role="button"], svg')].slice(0, 12)
-      .map(el => el.outerHTML.slice(0, 600)).join('\n\n');
+    const scope = card.parentElement?.parentElement || card.parentElement || card;
     return new Promise((resolve) => {
       browser.runtime.sendMessage({
         action: 'curationDebug',
-        payload: { kind: 'likebtn', job_id: jobId, html: buttons || scope.outerHTML.slice(0, 4000) }
+        payload: { kind: 'card-full', job_id: jobId, html: scope.outerHTML.slice(0, 18000) }
       }, () => resolve());
     });
   }
 
   function hover(el) {
-    ['pointerover', 'mouseover', 'mouseenter'].forEach(t =>
-      el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true })));
+    ['pointerenter', 'pointerover', 'mouseenter', 'mouseover', 'mousemove'].forEach(t =>
+      el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window })));
   }
 
   const wait = (ms) => new Promise(r => setTimeout(r, ms));
   const jitter = () => 2500 + Math.random() * 3500;
 
-  async function likeOne(item) {
-    const card = cardFor(item.job_id);
-    if (!card) return 'notfound';
-    card.scrollIntoView({ block: 'center' });
-    await wait(500);
-    hover(card);
-    await wait(400);
-    const ctl = likeControlNear(card);
-    if (!ctl) { await reconShip(item.job_id, card); return 'nobutton'; }
-    if (!ctl.already) {
-      ctl.el.click();
-      await wait(300);
+  async function likeVisible(pending, counters, btn) {
+    for (const item of pending) {
+      if (!liking) return;
+      if (item._done) continue;
+      const a = document.querySelector(`a[href*="${item.job_id}"]`);
+      if (!a) continue;
+      a.scrollIntoView({ block: 'center' });
+      await wait(500);
+      hover(a);
+      const overlayHost = a.parentElement || a;
+      hover(overlayHost);
+      await wait(450);
+      const ctl = likeControlNear(a);
+      if (!ctl) {
+        if (!item._reconned) { item._reconned = true; await reconShip(item.job_id, a); counters.nobtn++; }
+        continue;
+      }
+      if (!ctl.already) { ctl.el.click(); await wait(350); }
+      item._done = true;
+      counters[ctl.already ? 'already' : 'liked']++;
+      await new Promise((resolve) => {
+        browser.runtime.sendMessage({ action: 'markCuration', jobId: item.job_id, status: 'liked' }, () => resolve());
+      });
+      btn.textContent = `♥ ${counters.liked} liked · ${counters.already} were · ${counters.nobtn} ?  (click to stop)`;
+      await wait(jitter());
     }
-    await new Promise((resolve) => {
-      browser.runtime.sendMessage({ action: 'markCuration', jobId: item.job_id, status: 'liked' }, () => resolve());
-    });
-    return ctl.already ? 'already' : 'liked';
   }
 
   async function likeAll(btn) {
-    const items = (await pickIds()).filter(i => i.status === 'pending');
-    let liked = 0, already = 0, missing = 0, nobtn = 0;
-    for (const item of items) {
+    const items = (await pickItems()).filter(i => i.status === 'pending');
+    const counters = { liked: 0, already: 0, nobtn: 0 };
+    let dry = 0;
+    const scroller = document.scrollingElement || document.documentElement;
+    while (liking && dry < 8 && items.some(i => !i._done)) {
+      const before = counters.liked + counters.already;
+      await likeVisible(items, counters, btn);
       if (!liking) break;
-      const res = await likeOne(item);
-      if (res === 'liked') liked++;
-      else if (res === 'already') already++;
-      else if (res === 'nobutton') nobtn++;
-      else missing++;
-      btn.textContent = `♥ ${liked} liked · ${missing + nobtn} skipped (click to stop)`;
-      await wait(jitter());
+      const remaining = items.some(i => !i._done);
+      if (!remaining) break;
+      window.scrollBy(0, Math.round(window.innerHeight * 0.85));
+      scroller.scrollTop += Math.round(window.innerHeight * 0.85);
+      await wait(1500);
+      dry = (counters.liked + counters.already) === before ? dry + 1 : 0;
     }
     liking = false;
-    btn.textContent = `♥ done: ${liked} liked · ${already} already · ${missing} off-page · ${nobtn} no-button`;
-    setTimeout(() => { btn.textContent = likeLabel(); }, 12000);
+    const left = items.filter(i => !i._done).length;
+    btn.textContent = `♥ done: ${counters.liked} liked · ${counters.already} were · ${left} not found`;
+    setTimeout(() => { btn.textContent = '♥ Like picks in MJ'; }, 15000);
   }
-
-  function likeLabel() { return '♥ Like picks in MJ'; }
 
   function addLikeButton() {
     if (document.getElementById('claude-like-btn')) return;
     const b = document.createElement('button');
     b.id = 'claude-like-btn';
-    b.textContent = likeLabel();
+    b.textContent = '♥ Like picks in MJ';
     b.style.cssText = 'position:fixed;bottom:14px;right:190px;z-index:99999;background:#141414;color:#E8E6DB;font:700 12px/1.6 -apple-system,sans-serif;padding:6px 14px;border-radius:999px;border:1.5px solid #E8E6DB;cursor:pointer;';
     b.addEventListener('click', () => {
-      if (liking) { liking = false; b.textContent = likeLabel(); return; }
+      if (liking) { liking = false; b.textContent = '♥ Like picks in MJ'; return; }
       liking = true;
-      b.textContent = '♥ liking…';
+      b.textContent = '♥ starting…';
       likeAll(b);
     });
     document.body.appendChild(b);
